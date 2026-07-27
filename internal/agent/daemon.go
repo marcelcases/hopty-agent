@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/coder/websocket"
 	"github.com/marcelcases/hopty/internal/config"
 	"github.com/marcelcases/hopty/internal/control"
 	"github.com/marcelcases/hopty/internal/identity"
@@ -31,7 +30,7 @@ type Daemon struct {
 	connected  bool
 	paired     bool
 	controlMu  sync.Mutex
-	connection *websocket.Conn
+	connection *control.Session
 	waitGroup  sync.WaitGroup
 }
 
@@ -176,17 +175,32 @@ func (d *Daemon) runControl(ctx context.Context) {
 	for ctx.Err() == nil {
 		ready, connection, err := control.Connect(ctx, d.serviceURL, d.identity.PrivateKey, "dev")
 		if err == nil {
+			session := control.NewSession(connection)
+			readErr := make(chan error, 1)
+			go func() { readErr <- session.Run(ctx) }()
 			d.stateMu.Lock()
 			d.connected, d.paired = true, ready.Paired
 			d.stateMu.Unlock()
 			d.controlMu.Lock()
-			d.connection = connection
+			d.connection = session
 			d.controlMu.Unlock()
-			<-ctx.Done()
+			connected := true
+			for connected {
+				select {
+				case <-ctx.Done():
+					connected = false
+				case _, ok := <-session.Events():
+					if !ok {
+						connected = false
+					}
+				case <-readErr:
+					connected = false
+				}
+			}
 			d.controlMu.Lock()
 			d.connection = nil
 			d.controlMu.Unlock()
-			connection.CloseNow()
+			session.CloseNow()
 		}
 		d.stateMu.Lock()
 		d.connected = false
