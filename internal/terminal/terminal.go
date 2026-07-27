@@ -101,7 +101,9 @@ func (t *session) offer(ctx context.Context, raw json.RawMessage) error {
 			dc.OnOpen(func() {
 				if t.startPTY() != nil {
 					t.close("pty_start_failed")
+					return
 				}
+				_ = t.manager.send(context.Background(), "terminal.signal", control.TerminalSignal{TerminalID: t.id, Kind: "active", Data: json.RawMessage(`{}`)})
 			})
 			dc.OnMessage(t.message)
 		})
