@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -157,6 +158,7 @@ func (t *session) startPTY() error {
 		shell = "/bin/sh"
 	}
 	cmd := exec.Command(shell, "-l")
+	cmd.Env = terminalEnvironment(os.Environ())
 	ptmx, err := pty.Start(cmd)
 	if err == nil {
 		t.cmd, t.pty = cmd, ptmx
@@ -169,6 +171,17 @@ func (t *session) startPTY() error {
 	go func() { _ = cmd.Wait(); t.close("shell_exit") }()
 	return nil
 }
+func terminalEnvironment(environment []string) []string {
+	filtered := make([]string, 0, len(environment)+3)
+	for _, variable := range environment {
+		if strings.HasPrefix(variable, "TERM=") || strings.HasPrefix(variable, "COLORTERM=") || strings.HasPrefix(variable, "TERM_PROGRAM=") {
+			continue
+		}
+		filtered = append(filtered, variable)
+	}
+	return append(filtered, "TERM=xterm-256color", "COLORTERM=truecolor", "TERM_PROGRAM=hopty")
+}
+
 func (t *session) copyOutput(ptmx *os.File) {
 	buffer := make([]byte, maxFrame-1)
 	for {
