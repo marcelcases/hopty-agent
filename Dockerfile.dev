@@ -12,7 +12,8 @@ RUN go vet ./... && go test ./... && sh -n install/install.sh
 
 FROM base AS build
 ARG VERSION=dev
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/hopty ./cmd/hopty
+ARG GOARCH=amd64
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/hopty ./cmd/hopty
 
 FROM base AS dev
 CMD ["sh"]
