@@ -156,7 +156,7 @@ func (t *session) startPTY() error {
 	if shell == "" {
 		shell = "/bin/sh"
 	}
-	cmd := exec.Command(shell)
+	cmd := exec.Command(shell, "-l")
 	ptmx, err := pty.Start(cmd)
 	if err == nil {
 		t.cmd, t.pty = cmd, ptmx
