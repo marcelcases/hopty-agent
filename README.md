@@ -16,4 +16,6 @@ make build
 make dev
 ```
 
-The agent implementation is introduced incrementally; pairing and terminal commands are not available yet.
+## Installation
+
+The immutable service installer injects a release version, SHA-256 digest, and service origin before it is served as `/install.sh`. It installs under `~/.hopty/`, verifies the binary, starts a user service when available, then runs `hopty pair`. It never invokes `sudo`; it only prints the optional `loginctl enable-linger` command.

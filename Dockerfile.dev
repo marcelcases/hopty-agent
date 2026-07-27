@@ -8,7 +8,7 @@ RUN go mod download
 COPY . .
 
 FROM base AS test
-RUN go vet ./... && go test ./...
+RUN go vet ./... && go test ./... && sh -n install/install.sh
 
 FROM base AS build
 ARG VERSION=dev
