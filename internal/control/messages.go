@@ -41,6 +41,10 @@ type ICEServer struct {
 	Credential string   `json:"credential"`
 }
 
+type ActiveTerminals struct {
+	TerminalIDs []string `json:"terminal_ids"`
+}
+
 type TerminalOpen struct {
 	TerminalID string      `json:"terminal_id"`
 	ICEServers []ICEServer `json:"ice_servers"`

@@ -259,6 +259,16 @@ func (t *session) close(reason string) {
 		_ = t.manager.send(ctx, "terminal.signal", control.TerminalSignal{TerminalID: t.id, Kind: "close", Data: json.RawMessage(`{"reason":"` + reason + `"}`)})
 	})
 }
+func (m *Manager) ActiveIDs() []string {
+	m.mu.Lock()
+	ids := make([]string, 0, len(m.terminals))
+	for id := range m.terminals {
+		ids = append(ids, id)
+	}
+	m.mu.Unlock()
+	return ids
+}
+
 func (m *Manager) CloseAll() {
 	m.mu.Lock()
 	all := make([]*session, 0, len(m.terminals))

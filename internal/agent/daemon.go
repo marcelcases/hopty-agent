@@ -199,6 +199,9 @@ func (d *Daemon) runControl(ctx context.Context) {
 			d.controlMu.Lock()
 			d.connection = session
 			d.controlMu.Unlock()
+			if d.terminals != nil {
+				_ = session.Send(ctx, "agent.active_terminals", control.ActiveTerminals{TerminalIDs: d.terminals.ActiveIDs()})
+			}
 			connected := true
 			for connected {
 				select {
