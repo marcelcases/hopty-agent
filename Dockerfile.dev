@@ -1,0 +1,18 @@
+FROM golang:1.25.5-alpine3.22 AS base
+
+WORKDIR /src
+
+COPY go.mod ./
+RUN go mod download
+
+COPY . .
+
+FROM base AS test
+RUN go vet ./... && go test ./...
+
+FROM base AS build
+ARG VERSION=dev
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/hopty ./cmd/hopty
+
+FROM base AS dev
+CMD ["sh"]
