@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/marcelcases/hopty/internal/config"
 	"github.com/marcelcases/hopty/internal/control"
 	"github.com/marcelcases/hopty/internal/identity"
@@ -29,6 +30,8 @@ type Daemon struct {
 	stateMu    sync.RWMutex
 	connected  bool
 	paired     bool
+	controlMu  sync.Mutex
+	connection *websocket.Conn
 	waitGroup  sync.WaitGroup
 }
 
@@ -127,12 +130,45 @@ func (d *Daemon) handle(connection *net.UnixConn) {
 		d.stateMu.RLock()
 		response.Status = &localapi.Status{Connected: d.connected, Paired: d.paired}
 		d.stateMu.RUnlock()
-	case "pair", "cancel", "revoke":
-		response.Error = "agent control connection is unavailable"
+	case "pair":
+		response.Pairing, response.Error = d.createPairing()
+	case "cancel":
+		response.Error = d.cancelPairing()
+	case "revoke":
+		response.Error = "credential revocation is unavailable"
 	default:
 		response.Error = "unknown command"
 	}
 	_ = localapi.WriteResponse(connection, response)
+}
+
+func (d *Daemon) createPairing() (*localapi.Pairing, string) {
+	d.controlMu.Lock()
+	defer d.controlMu.Unlock()
+	if d.connection == nil {
+		return nil, "agent control connection is unavailable"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	created, err := control.CreatePairing(ctx, d.connection)
+	if err != nil {
+		return nil, "agent control connection is unavailable"
+	}
+	return &localapi.Pairing{URL: created.PairingURL, Code: created.VerificationCode, ExpiresAt: created.ExpiresAt.UTC().Format(time.RFC3339)}, ""
+}
+
+func (d *Daemon) cancelPairing() string {
+	d.controlMu.Lock()
+	defer d.controlMu.Unlock()
+	if d.connection == nil {
+		return "agent control connection is unavailable"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := control.CancelPairing(ctx, d.connection); err != nil {
+		return "agent control connection is unavailable"
+	}
+	return ""
 }
 
 func (d *Daemon) runControl(ctx context.Context) {
@@ -143,7 +179,13 @@ func (d *Daemon) runControl(ctx context.Context) {
 			d.stateMu.Lock()
 			d.connected, d.paired = true, ready.Paired
 			d.stateMu.Unlock()
-			_, _, err = connection.Reader(ctx)
+			d.controlMu.Lock()
+			d.connection = connection
+			d.controlMu.Unlock()
+			<-ctx.Done()
+			d.controlMu.Lock()
+			d.connection = nil
+			d.controlMu.Unlock()
 			connection.CloseNow()
 		}
 		d.stateMu.Lock()

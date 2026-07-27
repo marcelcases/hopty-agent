@@ -86,6 +86,9 @@ func call(home, command string) error {
 	if response.Status != nil {
 		fmt.Printf("connected=%t paired=%t active_terminals=%d\n", response.Status.Connected, response.Status.Paired, response.Status.ActiveTerminals)
 	}
+	if response.Pairing != nil {
+		fmt.Printf("%s\nVerification code: %s\nExpires: %s\n", response.Pairing.URL, response.Pairing.Code, response.Pairing.ExpiresAt)
+	}
 	return nil
 }
 

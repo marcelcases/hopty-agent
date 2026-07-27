@@ -23,9 +23,16 @@ type Status struct {
 	ActiveTerminals int  `json:"active_terminals"`
 }
 
+type Pairing struct {
+	URL       string `json:"url"`
+	Code      string `json:"code"`
+	ExpiresAt string `json:"expires_at"`
+}
+
 type Response struct {
-	Status *Status `json:"status,omitempty"`
-	Error  string  `json:"error,omitempty"`
+	Status  *Status  `json:"status,omitempty"`
+	Pairing *Pairing `json:"pairing,omitempty"`
+	Error   string   `json:"error,omitempty"`
 }
 
 func ReadRequest(reader io.Reader) (Request, error) {
