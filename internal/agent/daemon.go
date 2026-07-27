@@ -3,6 +3,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -17,6 +18,7 @@ import (
 	"github.com/marcelcases/hopty/internal/control"
 	"github.com/marcelcases/hopty/internal/identity"
 	"github.com/marcelcases/hopty/internal/localapi"
+	"github.com/marcelcases/hopty/internal/terminal"
 )
 
 type Daemon struct {
@@ -31,6 +33,7 @@ type Daemon struct {
 	paired     bool
 	controlMu  sync.Mutex
 	connection *control.Session
+	terminals  *terminal.Manager
 	waitGroup  sync.WaitGroup
 }
 
@@ -71,7 +74,16 @@ func Start(home string) (*Daemon, error) {
 		lock.Close()
 		return nil, err
 	}
-	return &Daemon{home: home, socketPath: socketPath, listener: listener, lock: lock, identity: identityValue, serviceURL: serviceURL}, nil
+	daemon := &Daemon{home: home, socketPath: socketPath, listener: listener, lock: lock, identity: identityValue, serviceURL: serviceURL}
+	daemon.terminals = terminal.New(func(ctx context.Context, typ string, payload any) error {
+		daemon.controlMu.Lock()
+		defer daemon.controlMu.Unlock()
+		if daemon.connection == nil {
+			return errors.New("agent control connection is unavailable")
+		}
+		return daemon.connection.Send(ctx, typ, payload)
+	})
+	return daemon, nil
 }
 
 func (d *Daemon) SocketPath() string { return d.socketPath }
@@ -109,6 +121,9 @@ func (d *Daemon) Run(ctx context.Context) error {
 func (d *Daemon) Close() error {
 	if d.listener != nil {
 		_ = d.listener.Close()
+	}
+	if d.terminals != nil {
+		d.terminals.CloseAll()
 	}
 	d.waitGroup.Wait()
 	_ = os.Remove(d.socketPath)
@@ -189,9 +204,11 @@ func (d *Daemon) runControl(ctx context.Context) {
 				select {
 				case <-ctx.Done():
 					connected = false
-				case _, ok := <-session.Events():
+				case event, ok := <-session.Events():
 					if !ok {
 						connected = false
+					} else {
+						d.handleControlEvent(event)
 					}
 				case <-readErr:
 					connected = false
@@ -215,6 +232,29 @@ func (d *Daemon) runControl(ctx context.Context) {
 		}
 		if backoff < 30*time.Second {
 			backoff *= 2
+		}
+	}
+}
+
+func (d *Daemon) handleControlEvent(event control.Envelope) {
+	if d.terminals == nil {
+		return
+	}
+	switch event.Type {
+	case "terminal.open":
+		var open control.TerminalOpen
+		if json.Unmarshal(event.Payload, &open) == nil {
+			_ = d.terminals.Open(open)
+		}
+	case "terminal.signal":
+		var signal control.TerminalSignal
+		if json.Unmarshal(event.Payload, &signal) == nil {
+			_ = d.terminals.Signal(context.Background(), signal)
+		}
+	case "terminal.close":
+		var signal control.TerminalSignal
+		if json.Unmarshal(event.Payload, &signal) == nil {
+			_ = d.terminals.Signal(context.Background(), signal)
 		}
 	}
 }

@@ -52,6 +52,20 @@ func (s *Session) Run(ctx context.Context) error {
 
 func (s *Session) CloseNow() { s.connection.CloseNow() }
 
+func (s *Session) Send(ctx context.Context, typ string, payload any) error {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	requestID, err := NewRequestID()
+	if err != nil {
+		return err
+	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return wsjson.Write(ctx, s.connection, Envelope{Version: Version, Type: typ, RequestID: requestID, Payload: data})
+}
+
 func (s *Session) request(ctx context.Context, typ string, payload any, responseType string, output any) error {
 	data, err := json.Marshal(payload)
 	if err != nil {

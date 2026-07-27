@@ -35,6 +35,23 @@ type Ready struct {
 	Paired  bool   `json:"paired"`
 }
 
+type ICEServer struct {
+	URLs       []string `json:"urls"`
+	Username   string   `json:"username"`
+	Credential string   `json:"credential"`
+}
+
+type TerminalOpen struct {
+	TerminalID string      `json:"terminal_id"`
+	ICEServers []ICEServer `json:"ice_servers"`
+}
+
+type TerminalSignal struct {
+	TerminalID string          `json:"terminal_id"`
+	Kind       string          `json:"kind"`
+	Data       json.RawMessage `json:"data"`
+}
+
 func NewRequestID() (string, error) {
 	bytes := make([]byte, 16)
 	if _, err := rand.Read(bytes); err != nil {
