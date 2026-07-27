@@ -190,6 +190,7 @@ func (d *Daemon) runControl(ctx context.Context) {
 	for ctx.Err() == nil {
 		ready, connection, err := control.Connect(ctx, d.serviceURL, d.identity.PrivateKey, "dev")
 		if err == nil {
+			backoff = time.Second
 			connectionCtx, stopConnection := context.WithCancel(ctx)
 			session := control.NewSession(connection)
 			readErr := make(chan error, 1)
