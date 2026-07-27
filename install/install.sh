@@ -4,11 +4,12 @@ set -eu
 umask 077
 
 : "${HOPTY_VERSION:?HOPTY_VERSION is required}"
-: "${HOPTY_SHA256:?HOPTY_SHA256 is required}"
+: "${HOPTY_SHA256_AMD64:?HOPTY_SHA256_AMD64 is required}"
+: "${HOPTY_SHA256_ARM64:?HOPTY_SHA256_ARM64 is required}"
 : "${HOPTY_SERVICE_URL:?HOPTY_SERVICE_URL is required}"
 
 case "$(uname -s)" in Linux) ;; *) echo "Hopty supports Linux only" >&2; exit 1;; esac
-case "$(uname -m)" in x86_64|amd64) arch=amd64;; aarch64|arm64) arch=arm64;; *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1;; esac
+case "$(uname -m)" in x86_64|amd64) arch=amd64; checksum=$HOPTY_SHA256_AMD64;; aarch64|arm64) arch=arm64; checksum=$HOPTY_SHA256_ARM64;; *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1;; esac
 
 home=${HOME:?HOME is required}/.hopty
 bin_dir=$home/bin
@@ -24,7 +25,7 @@ trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 if command -v curl >/dev/null 2>&1; then curl --fail --location --proto '=https' --tlsv1.2 -o "$work/hopty" "$base_url/$asset"; elif command -v wget >/dev/null 2>&1; then wget -O "$work/hopty" "$base_url/$asset"; else echo "curl or wget is required" >&2; exit 1; fi
 actual=$(sha256sum "$work/hopty" 2>/dev/null | awk '{print $1}' || shasum -a 256 "$work/hopty" | awk '{print $1}')
-[ "$actual" = "$HOPTY_SHA256" ] || { echo "Hopty checksum verification failed" >&2; exit 1; }
+[ "$actual" = "$checksum" ] || { echo "Hopty checksum verification failed" >&2; exit 1; }
 chmod 700 "$work/hopty"
 mv -f "$work/hopty" "$bin_dir/hopty"
 
