@@ -6,12 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/marcelcases/hopty/internal/config"
+	"github.com/marcelcases/hopty/internal/control"
 	"github.com/marcelcases/hopty/internal/identity"
 	"github.com/marcelcases/hopty/internal/localapi"
 )
@@ -22,12 +25,22 @@ type Daemon struct {
 	listener   *net.UnixListener
 	lock       *os.File
 	identity   identity.Identity
+	serviceURL *url.URL
+	stateMu    sync.RWMutex
+	connected  bool
+	paired     bool
 	waitGroup  sync.WaitGroup
 }
 
 func Start(home string) (*Daemon, error) {
 	identityValue, err := identity.LoadOrCreate(home)
 	if err != nil {
+		return nil, err
+	}
+	var serviceURL *url.URL
+	if loaded, err := config.Load(home); err == nil {
+		serviceURL = loaded.ServiceURL
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 	runDirectory := filepath.Join(home, "run")
@@ -56,12 +69,19 @@ func Start(home string) (*Daemon, error) {
 		lock.Close()
 		return nil, err
 	}
-	return &Daemon{home: home, socketPath: socketPath, listener: listener, lock: lock, identity: identityValue}, nil
+	return &Daemon{home: home, socketPath: socketPath, listener: listener, lock: lock, identity: identityValue, serviceURL: serviceURL}, nil
 }
 
 func (d *Daemon) SocketPath() string { return d.socketPath }
 
 func (d *Daemon) Run(ctx context.Context) error {
+	if d.serviceURL != nil {
+		d.waitGroup.Add(1)
+		go func() {
+			defer d.waitGroup.Done()
+			d.runControl(ctx)
+		}()
+	}
 	go func() {
 		<-ctx.Done()
 		_ = d.listener.Close()
@@ -104,13 +124,43 @@ func (d *Daemon) handle(connection *net.UnixConn) {
 	response := localapi.Response{}
 	switch request.Command {
 	case "status":
-		response.Status = &localapi.Status{}
+		d.stateMu.RLock()
+		response.Status = &localapi.Status{Connected: d.connected, Paired: d.paired}
+		d.stateMu.RUnlock()
 	case "pair", "cancel", "revoke":
 		response.Error = "agent control connection is unavailable"
 	default:
 		response.Error = "unknown command"
 	}
 	_ = localapi.WriteResponse(connection, response)
+}
+
+func (d *Daemon) runControl(ctx context.Context) {
+	backoff := time.Second
+	for ctx.Err() == nil {
+		ready, connection, err := control.Connect(ctx, d.serviceURL, d.identity.PrivateKey, "dev")
+		if err == nil {
+			d.stateMu.Lock()
+			d.connected, d.paired = true, ready.Paired
+			d.stateMu.Unlock()
+			_, _, err = connection.Reader(ctx)
+			connection.CloseNow()
+		}
+		d.stateMu.Lock()
+		d.connected = false
+		d.stateMu.Unlock()
+		if ctx.Err() != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+		if backoff < 30*time.Second {
+			backoff *= 2
+		}
+	}
 }
 
 func lock(path string) (*os.File, error) {
