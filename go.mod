@@ -3,12 +3,12 @@ module github.com/marcelcases/hopty
 go 1.25.5
 
 require (
+	github.com/coder/websocket v1.8.15
 	github.com/creack/pty v1.1.24
 	github.com/pion/webrtc/v4 v4.2.17
 )
 
 require (
-	github.com/coder/websocket v1.8.15 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/pion/datachannel v1.6.2 // indirect
 	github.com/pion/dtls/v3 v3.1.5 // indirect
