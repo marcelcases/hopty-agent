@@ -42,5 +42,13 @@ WantedBy=default.target
 EOF
 
 if systemctl --user daemon-reload >/dev/null 2>&1 && systemctl --user enable --now hopty.service >/dev/null 2>&1; then :; else nohup "$bin_dir/hopty" agent >"$home/agent.log" 2>&1 & fi
+attempt=0
+while :; do
+  status=$("$bin_dir/hopty" status 2>/dev/null || true)
+  case "$status" in *"connected=true"*) break;; esac
+  attempt=$((attempt + 1))
+  [ "$attempt" -lt 30 ] || { echo "Hopty agent did not connect within 30 seconds" >&2; exit 1; }
+  sleep 1
+done
 "$bin_dir/hopty" pair
 printf '\nFor persistence after logout/reboot, run once:\n  sudo loginctl enable-linger %s\n' "$(id -un)"
