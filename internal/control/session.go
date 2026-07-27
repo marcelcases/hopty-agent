@@ -52,6 +52,12 @@ func (s *Session) Run(ctx context.Context) error {
 
 func (s *Session) CloseNow() { s.connection.CloseNow() }
 
+func (s *Session) Ping(ctx context.Context) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return s.connection.Ping(ctx)
+}
+
 func (s *Session) Send(ctx context.Context, typ string, payload any) error {
 	data, err := json.Marshal(payload)
 	if err != nil {

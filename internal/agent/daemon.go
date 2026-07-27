@@ -190,9 +190,30 @@ func (d *Daemon) runControl(ctx context.Context) {
 	for ctx.Err() == nil {
 		ready, connection, err := control.Connect(ctx, d.serviceURL, d.identity.PrivateKey, "dev")
 		if err == nil {
+			connectionCtx, stopConnection := context.WithCancel(ctx)
 			session := control.NewSession(connection)
 			readErr := make(chan error, 1)
-			go func() { readErr <- session.Run(ctx) }()
+			keepaliveDone := make(chan struct{})
+			go func() { readErr <- session.Run(connectionCtx) }()
+			go func() {
+				defer close(keepaliveDone)
+				ticker := time.NewTicker(20 * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-connectionCtx.Done():
+						return
+					case <-ticker.C:
+						pingCtx, cancel := context.WithTimeout(connectionCtx, 10*time.Second)
+						err := session.Ping(pingCtx)
+						cancel()
+						if err != nil {
+							session.CloseNow()
+							return
+						}
+					}
+				}
+			}()
 			d.stateMu.Lock()
 			d.connected, d.paired = true, ready.Paired
 			d.stateMu.Unlock()
@@ -200,7 +221,7 @@ func (d *Daemon) runControl(ctx context.Context) {
 			d.connection = session
 			d.controlMu.Unlock()
 			if d.terminals != nil {
-				_ = session.Send(ctx, "agent.active_terminals", control.ActiveTerminals{TerminalIDs: d.terminals.ActiveIDs()})
+				_ = session.Send(connectionCtx, "agent.active_terminals", control.ActiveTerminals{TerminalIDs: d.terminals.ActiveIDs()})
 			}
 			connected := true
 			for connected {
@@ -217,10 +238,12 @@ func (d *Daemon) runControl(ctx context.Context) {
 					connected = false
 				}
 			}
+			stopConnection()
+			session.CloseNow()
+			<-keepaliveDone
 			d.controlMu.Lock()
 			d.connection = nil
 			d.controlMu.Unlock()
-			session.CloseNow()
 		}
 		d.stateMu.Lock()
 		d.connected = false
