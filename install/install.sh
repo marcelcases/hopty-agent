@@ -13,8 +13,9 @@ case "$(uname -m)" in x86_64|amd64) arch=amd64; checksum=$HOPTY_SHA256_AMD64;; a
 
 home=${HOME:?HOME is required}/.hopty
 bin_dir=$home/bin
-mkdir -p "$bin_dir" "$home/run" "$home/tmp"
-chmod 700 "$home" "$bin_dir" "$home/run" "$home/tmp"
+local_bin=$HOME/.local/bin
+mkdir -p "$bin_dir" "$home/run" "$home/tmp" "$local_bin"
+chmod 700 "$home" "$bin_dir" "$home/run" "$home/tmp" "$local_bin"
 if [ ! -f "$home/config.toml" ]; then printf 'service_url = "%s"\n' "$HOPTY_SERVICE_URL" >"$home/config.toml"; fi
 chmod 600 "$home/config.toml"
 
@@ -28,6 +29,11 @@ actual=$(sha256sum "$work/hopty" 2>/dev/null | awk '{print $1}' || shasum -a 256
 [ "$actual" = "$checksum" ] || { echo "Hopty checksum verification failed" >&2; exit 1; }
 chmod 700 "$work/hopty"
 mv -f "$work/hopty" "$bin_dir/hopty"
+ln -sfn "$bin_dir/hopty" "$local_bin/hopty"
+for profile in "$HOME/.profile" "$HOME/.bashrc"; do
+  [ -f "$profile" ] || : >"$profile"
+  grep -Fqx 'export PATH="$HOME/.local/bin:$PATH"' "$profile" || printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >>"$profile"
+done
 
 mkdir -p "$HOME/.config/systemd/user"
 cat >"$HOME/.config/systemd/user/hopty.service" <<EOF
@@ -51,4 +57,5 @@ while :; do
   sleep 1
 done
 case "$status" in *"paired=true"*) echo "Hopty agent is already paired.";; *) "$bin_dir/hopty" pair;; esac
-printf '\nFor persistence after logout/reboot, run once:\n  sudo loginctl enable-linger %s\n' "$(id -un)"
+printf '\nHopty is available at %s/hopty. Open a new shell to use the hopty command.\n' "$local_bin"
+printf 'For persistence after logout/reboot, run once:\n  sudo loginctl enable-linger %s\n' "$(id -un)"
