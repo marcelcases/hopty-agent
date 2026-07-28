@@ -234,7 +234,7 @@ func (t *session) connectionState(state webrtc.PeerConnectionState) {
 	case webrtc.PeerConnectionStateDisconnected:
 		t.mu.Lock()
 		if t.recovery == nil && !t.closed {
-			t.recovery = time.AfterFunc(10*time.Second, func() { t.close("recovery_timeout") })
+			t.recovery = time.AfterFunc(30*time.Second, func() { t.close("recovery_timeout") })
 		}
 		t.mu.Unlock()
 	case webrtc.PeerConnectionStateConnected:
