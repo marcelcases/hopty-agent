@@ -14,11 +14,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/marcelcases/hopty/internal/config"
-	"github.com/marcelcases/hopty/internal/control"
-	"github.com/marcelcases/hopty/internal/identity"
-	"github.com/marcelcases/hopty/internal/localapi"
-	"github.com/marcelcases/hopty/internal/terminal"
+	"github.com/marcelcases/hopty-agent/internal/config"
+	"github.com/marcelcases/hopty-agent/internal/control"
+	"github.com/marcelcases/hopty-agent/internal/identity"
+	"github.com/marcelcases/hopty-agent/internal/localapi"
+	"github.com/marcelcases/hopty-agent/internal/terminal"
 )
 
 type Daemon struct {

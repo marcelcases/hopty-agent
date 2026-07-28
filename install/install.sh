@@ -18,7 +18,7 @@ chmod 700 "$home" "$bin_dir" "$home/run"
 if [ ! -f "$home/config.toml" ]; then printf 'service_url = "%s"\n' "$HOPTY_SERVICE_URL" >"$home/config.toml"; fi
 chmod 600 "$home/config.toml"
 
-base_url=${HOPTY_RELEASE_BASE_URL:-https://github.com/marcelcases/hopty/releases/download/$HOPTY_VERSION}
+base_url=${HOPTY_RELEASE_BASE_URL:-https://github.com/marcelcases/hopty-agent/releases/download/$HOPTY_VERSION}
 asset=hopty_linux_$arch
 work=$(mktemp -d "${TMPDIR:-/tmp}/hopty.XXXXXX")
 trap 'rm -rf "$work"' EXIT HUP INT TERM

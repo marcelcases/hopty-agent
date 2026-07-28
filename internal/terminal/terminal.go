@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
-	"github.com/marcelcases/hopty/internal/control"
+	"github.com/marcelcases/hopty-agent/internal/control"
 	"github.com/pion/webrtc/v4"
 )
 

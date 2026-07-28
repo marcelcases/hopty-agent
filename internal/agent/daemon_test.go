@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/marcelcases/hopty/internal/localapi"
+	"github.com/marcelcases/hopty-agent/internal/localapi"
 )
 
 func TestDaemonStatusAndLock(t *testing.T) {

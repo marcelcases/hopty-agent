@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/marcelcases/hopty/internal/agent"
-	"github.com/marcelcases/hopty/internal/localapi"
+	"github.com/marcelcases/hopty-agent/internal/agent"
+	"github.com/marcelcases/hopty-agent/internal/localapi"
 )
 
 var version = "dev"

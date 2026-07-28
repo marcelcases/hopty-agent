@@ -1,4 +1,4 @@
-module github.com/marcelcases/hopty
+module github.com/marcelcases/hopty-agent
 
 go 1.25.5
 
