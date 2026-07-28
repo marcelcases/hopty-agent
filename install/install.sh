@@ -22,7 +22,7 @@ chmod 600 "$home/config.toml"
 base_url=${HOPTY_RELEASE_BASE_URL:-https://github.com/marcelcases/hopty-agent/releases/download/$HOPTY_VERSION}
 asset=hopty_linux_$arch
 work=$(mktemp -d "$home/tmp/hopty.XXXXXX")
-trap 'rm -rf "$work"' EXIT HUP INT TERM
+trap 'rm -rf "$work" "$home/tmp"' EXIT HUP INT TERM
 
 if command -v curl >/dev/null 2>&1; then curl --fail --location --proto '=https' --tlsv1.2 -o "$work/hopty" "$base_url/$asset"; elif command -v wget >/dev/null 2>&1; then wget -O "$work/hopty" "$base_url/$asset"; else echo "curl or wget is required" >&2; exit 1; fi
 actual=$(sha256sum "$work/hopty" 2>/dev/null | awk '{print $1}' || shasum -a 256 "$work/hopty" | awk '{print $1}')

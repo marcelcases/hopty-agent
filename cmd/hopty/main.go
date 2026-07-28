@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/marcelcases/hopty-agent/internal/agent"
 	"github.com/marcelcases/hopty-agent/internal/localapi"
@@ -76,20 +77,27 @@ func runAgent(home string) error {
 }
 
 func call(home, command string) error {
-	response, err := localapi.Call(filepath.Join(home, "run", "agent.sock"), localapi.Request{Command: command})
-	if err != nil {
-		return fmt.Errorf("agent is not running: %w", err)
+	deadline := time.Now().Add(35 * time.Second)
+	for {
+		response, err := localapi.Call(filepath.Join(home, "run", "agent.sock"), localapi.Request{Command: command})
+		if err != nil {
+			return fmt.Errorf("agent is not running: %w", err)
+		}
+		if response.Error == "agent control connection is unavailable" && command == "pair" && time.Now().Before(deadline) {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		if response.Error != "" {
+			return errors.New(response.Error)
+		}
+		if response.Status != nil {
+			fmt.Printf("connected=%t paired=%t active_terminals=%d\n", response.Status.Connected, response.Status.Paired, response.Status.ActiveTerminals)
+		}
+		if response.Pairing != nil {
+			fmt.Printf("%s\nVerification code: %s\nExpires: %s\n", response.Pairing.URL, response.Pairing.Code, response.Pairing.ExpiresAt)
+		}
+		return nil
 	}
-	if response.Error != "" {
-		return errors.New(response.Error)
-	}
-	if response.Status != nil {
-		fmt.Printf("connected=%t paired=%t active_terminals=%d\n", response.Status.Connected, response.Status.Paired, response.Status.ActiveTerminals)
-	}
-	if response.Pairing != nil {
-		fmt.Printf("%s\nVerification code: %s\nExpires: %s\n", response.Pairing.URL, response.Pairing.Code, response.Pairing.ExpiresAt)
-	}
-	return nil
 }
 
 func defaultHome() string {
