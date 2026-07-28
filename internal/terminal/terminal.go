@@ -231,7 +231,7 @@ func (t *session) message(message webrtc.DataChannelMessage) {
 }
 func (t *session) connectionState(state webrtc.PeerConnectionState) {
 	switch state {
-	case webrtc.PeerConnectionStateDisconnected:
+	case webrtc.PeerConnectionStateDisconnected, webrtc.PeerConnectionStateFailed:
 		t.mu.Lock()
 		if t.recovery == nil && !t.closed {
 			t.recovery = time.AfterFunc(30*time.Second, func() { t.close("recovery_timeout") })
@@ -244,7 +244,7 @@ func (t *session) connectionState(state webrtc.PeerConnectionState) {
 			t.recovery = nil
 		}
 		t.mu.Unlock()
-	case webrtc.PeerConnectionStateFailed, webrtc.PeerConnectionStateClosed:
+	case webrtc.PeerConnectionStateClosed:
 		t.close("channel_closed")
 	}
 }
