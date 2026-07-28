@@ -13,14 +13,14 @@ case "$(uname -m)" in x86_64|amd64) arch=amd64; checksum=$HOPTY_SHA256_AMD64;; a
 
 home=${HOME:?HOME is required}/.hopty
 bin_dir=$home/bin
-mkdir -p "$bin_dir" "$home/run"
-chmod 700 "$home" "$bin_dir" "$home/run"
+mkdir -p "$bin_dir" "$home/run" "$home/tmp"
+chmod 700 "$home" "$bin_dir" "$home/run" "$home/tmp"
 if [ ! -f "$home/config.toml" ]; then printf 'service_url = "%s"\n' "$HOPTY_SERVICE_URL" >"$home/config.toml"; fi
 chmod 600 "$home/config.toml"
 
 base_url=${HOPTY_RELEASE_BASE_URL:-https://github.com/marcelcases/hopty-agent/releases/download/$HOPTY_VERSION}
 asset=hopty_linux_$arch
-work=$(mktemp -d "${TMPDIR:-/tmp}/hopty.XXXXXX")
+work=$(mktemp -d "$home/tmp/hopty.XXXXXX")
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 if command -v curl >/dev/null 2>&1; then curl --fail --location --proto '=https' --tlsv1.2 -o "$work/hopty" "$base_url/$asset"; elif command -v wget >/dev/null 2>&1; then wget -O "$work/hopty" "$base_url/$asset"; else echo "curl or wget is required" >&2; exit 1; fi
