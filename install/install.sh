@@ -9,7 +9,7 @@ umask 077
 : "${HOPTY_SERVICE_URL:?HOPTY_SERVICE_URL is required}"
 
 if [ -t 1 ]; then
-  green='\033[1;92m'; dim='\033[2m'; cyan='\033[1;96m'; reset='\033[0m'
+  green=$(printf '\033[1;92m'); dim=$(printf '\033[2m'); cyan=$(printf '\033[1;96m'); reset=$(printf '\033[0m')
 else
   green= dim= cyan= reset=
 fi
