@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,8 +19,9 @@ import (
 )
 
 const (
-	label    = "hopty.terminal.v1"
-	maxFrame = 64 << 10
+	label         = "hopty.terminal.v1"
+	metadataLabel = "hopty.metadata.v1"
+	maxFrame      = 64 << 10
 )
 
 type Manager struct {
@@ -28,38 +30,78 @@ type Manager struct {
 	send      func(context.Context, string, any) error
 }
 type session struct {
-	mu        sync.Mutex
-	id        string
-	config    webrtc.Configuration
-	manager   *Manager
-	pc        *webrtc.PeerConnection
-	dc        *webrtc.DataChannel
-	pty       *os.File
-	cmd       *exec.Cmd
-	closed    bool
-	closeOnce sync.Once
-	recovery  *time.Timer
+	mu           sync.Mutex
+	id           string
+	config       webrtc.Configuration
+	manager      *Manager
+	pc           *webrtc.PeerConnection
+	dc           *webrtc.DataChannel
+	metadata     *webrtc.DataChannel
+	pty          *os.File
+	cmd          *exec.Cmd
+	closed       bool
+	reconnecting bool
+	closeOnce    sync.Once
+	recovery     *time.Timer
 }
 
 func New(send func(context.Context, string, any) error) *Manager {
 	return &Manager{terminals: make(map[string]*session), send: send}
 }
 
+func peerConfiguration(servers []control.ICEServer) webrtc.Configuration {
+	ice := make([]webrtc.ICEServer, 0, len(servers))
+	for _, server := range servers {
+		ice = append(ice, webrtc.ICEServer{URLs: server.URLs, Username: server.Username, Credential: server.Credential})
+	}
+	return webrtc.Configuration{ICEServers: ice}
+}
+
 func (m *Manager) Open(open control.TerminalOpen) error {
 	if open.TerminalID == "" {
 		return errors.New("invalid terminal")
-	}
-	ice := make([]webrtc.ICEServer, 0, len(open.ICEServers))
-	for _, server := range open.ICEServers {
-		ice = append(ice, webrtc.ICEServer{URLs: server.URLs, Username: server.Username, Credential: server.Credential})
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, exists := m.terminals[open.TerminalID]; exists {
 		return errors.New("terminal already exists")
 	}
-	m.terminals[open.TerminalID] = &session{id: open.TerminalID, config: webrtc.Configuration{ICEServers: ice}, manager: m}
+	m.terminals[open.TerminalID] = &session{id: open.TerminalID, config: peerConfiguration(open.ICEServers), manager: m}
 	return nil
+}
+
+// Attach replaces the browser peer while retaining the local PTY.
+func (m *Manager) Attach(attach control.TerminalAttach) error {
+	if attach.TerminalID == "" {
+		return errors.New("invalid terminal")
+	}
+	m.mu.Lock()
+	terminal := m.terminals[attach.TerminalID]
+	m.mu.Unlock()
+	if terminal == nil {
+		return errors.New("unknown terminal")
+	}
+	terminal.attach(peerConfiguration(attach.ICEServers))
+	return nil
+}
+
+func (t *session) attach(config webrtc.Configuration) {
+	t.mu.Lock()
+	if t.closed {
+		t.mu.Unlock()
+		return
+	}
+	t.config, t.reconnecting = config, true
+	pc := t.pc
+	t.pc, t.dc, t.metadata = nil, nil, nil
+	if t.recovery != nil {
+		t.recovery.Stop()
+		t.recovery = nil
+	}
+	t.mu.Unlock()
+	if pc != nil {
+		_ = pc.Close()
+	}
 }
 
 func (m *Manager) Signal(ctx context.Context, signal control.TerminalSignal) error {
@@ -95,18 +137,27 @@ func (t *session) offer(ctx context.Context, raw json.RawMessage) error {
 			return err
 		}
 		pc.OnDataChannel(func(dc *webrtc.DataChannel) {
-			if dc.Label() != label || t.setDataChannel(dc) != nil {
-				_ = dc.Close()
-				return
-			}
-			dc.OnOpen(func() {
-				if t.startPTY() != nil {
-					t.close("pty_start_failed")
+			switch dc.Label() {
+			case label:
+				if t.setDataChannel(dc) != nil {
+					_ = dc.Close()
 					return
 				}
-				_ = t.manager.send(context.Background(), "terminal.signal", control.TerminalSignal{TerminalID: t.id, Kind: "active", Data: json.RawMessage(`{}`)})
-			})
-			dc.OnMessage(t.message)
+				dc.OnOpen(func() {
+					if t.startPTY() != nil {
+						t.close("pty_start_failed")
+						return
+					}
+					_ = t.manager.send(context.Background(), "terminal.signal", control.TerminalSignal{TerminalID: t.id, Kind: "active", Data: json.RawMessage(`{}`)})
+				})
+				dc.OnMessage(t.message)
+			case metadataLabel:
+				if t.setMetadataChannel(dc) != nil {
+					_ = dc.Close()
+				}
+			default:
+				_ = dc.Close()
+			}
 		})
 		pc.OnConnectionStateChange(t.connectionState)
 		t.mu.Lock()
@@ -147,11 +198,25 @@ func (t *session) setDataChannel(dc *webrtc.DataChannel) error {
 	t.dc = dc
 	return nil
 }
+
+func (t *session) setMetadataChannel(dc *webrtc.DataChannel) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.metadata != nil || t.closed {
+		return errors.New("unavailable")
+	}
+	t.metadata = dc
+	return nil
+}
 func (t *session) startPTY() error {
 	t.mu.Lock()
-	if t.closed || t.pty != nil {
+	if t.closed {
 		t.mu.Unlock()
 		return errors.New("unavailable")
+	}
+	if t.pty != nil {
+		t.mu.Unlock()
+		return nil
 	}
 	shell := os.Getenv("SHELL")
 	if shell == "" {
@@ -168,6 +233,7 @@ func (t *session) startPTY() error {
 		return err
 	}
 	go t.copyOutput(ptmx)
+	go t.copyMetadata(cmd.Process.Pid)
 	go func() { _ = cmd.Wait(); t.close("shell_exit") }()
 	return nil
 }
@@ -180,6 +246,33 @@ func terminalEnvironment(environment []string) []string {
 		filtered = append(filtered, variable)
 	}
 	return append(filtered, "TERM=xterm-256color", "COLORTERM=truecolor", "TERM_PROGRAM=hopty")
+}
+
+func (t *session) copyMetadata(pid int) {
+	var previous string
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		cwd, err := os.Readlink("/proc/" + strconv.Itoa(pid) + "/cwd")
+		if err == nil && cwd != previous {
+			t.mu.Lock()
+			metadata, closed := t.metadata, t.closed
+			t.mu.Unlock()
+			if !closed && metadata != nil && metadata.ReadyState() == webrtc.DataChannelStateOpen {
+				if encoded, marshalErr := json.Marshal(map[string]string{"cwd": cwd}); marshalErr == nil {
+					_ = metadata.Send(encoded)
+					previous = cwd
+				}
+			}
+		}
+		<-ticker.C
+		t.mu.Lock()
+		closed := t.closed
+		t.mu.Unlock()
+		if closed {
+			return
+		}
+	}
 }
 
 func (t *session) copyOutput(ptmx *os.File) {
@@ -230,6 +323,12 @@ func (t *session) message(message webrtc.DataChannelMessage) {
 	}
 }
 func (t *session) connectionState(state webrtc.PeerConnectionState) {
+	t.mu.Lock()
+	reconnecting := t.reconnecting
+	t.mu.Unlock()
+	if reconnecting && (state == webrtc.PeerConnectionStateClosed || state == webrtc.PeerConnectionStateFailed) {
+		return
+	}
 	switch state {
 	case webrtc.PeerConnectionStateDisconnected:
 		t.mu.Lock()
@@ -239,6 +338,7 @@ func (t *session) connectionState(state webrtc.PeerConnectionState) {
 		t.mu.Unlock()
 	case webrtc.PeerConnectionStateConnected:
 		t.mu.Lock()
+		t.reconnecting = false
 		if t.recovery != nil {
 			t.recovery.Stop()
 			t.recovery = nil
@@ -255,13 +355,16 @@ func (t *session) close(reason string) {
 		if t.recovery != nil {
 			t.recovery.Stop()
 		}
-		ptmx, dc, pc := t.pty, t.dc, t.pc
+		ptmx, dc, metadata, pc := t.pty, t.dc, t.metadata, t.pc
 		t.mu.Unlock()
 		if ptmx != nil {
 			_ = ptmx.Close()
 		}
 		if dc != nil {
 			_ = dc.Close()
+		}
+		if metadata != nil {
+			_ = metadata.Close()
 		}
 		if pc != nil {
 			_ = pc.Close()

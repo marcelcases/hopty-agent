@@ -273,6 +273,11 @@ func (d *Daemon) handleControlEvent(event control.Envelope) {
 		if json.Unmarshal(event.Payload, &open) == nil {
 			_ = d.terminals.Open(open)
 		}
+	case "terminal.attach":
+		var attach control.TerminalAttach
+		if json.Unmarshal(event.Payload, &attach) == nil {
+			_ = d.terminals.Attach(attach)
+		}
 	case "terminal.signal":
 		var signal control.TerminalSignal
 		if json.Unmarshal(event.Payload, &signal) == nil {

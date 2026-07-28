@@ -50,6 +50,11 @@ type TerminalOpen struct {
 	ICEServers []ICEServer `json:"ice_servers"`
 }
 
+type TerminalAttach struct {
+	TerminalID string      `json:"terminal_id"`
+	ICEServers []ICEServer `json:"ice_servers"`
+}
+
 type TerminalSignal struct {
 	TerminalID string          `json:"terminal_id"`
 	Kind       string          `json:"kind"`
