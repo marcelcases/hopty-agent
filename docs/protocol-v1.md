@@ -352,8 +352,6 @@ The service returns:
 
 The browser and agent negotiate one reliable, ordered WebRTC DataChannel named `hopty.terminal.v1`. Its frames are binary and never sent to the control plane.
 
-They may also negotiate `hopty.metadata.v1`, a direct ordered DataChannel carrying a bounded JSON object with the current working directory (`{"cwd":"/path"}`). It is display metadata only, remains browser-agent direct, and is never sent to, persisted by, or logged by the control plane.
-
 | Byte 0 | Direction | Remaining bytes | Validation |
 |---|---|---|---|
 | `0x01` | both | PTY bytes | Maximum 64 KiB frame. Browser input is sent only to the PTY; agent output is sent only to the renderer. |
