@@ -36,7 +36,13 @@ trap 'rm -rf "$work" "$home/tmp"' EXIT HUP INT TERM
 heading
 step "Downloading Hopty $HOPTY_VERSION for Linux/$arch"
 if command -v curl >/dev/null 2>&1; then
-  curl --fail --location --proto '=https' --tlsv1.2 -o "$work/hopty" "$base_url/$asset"
+  if [ -t 1 ]; then
+    printf '%s' "$green"
+    curl --fail --location --proto '=https' --tlsv1.2 --progress-bar -o "$work/hopty" "$base_url/$asset"
+    printf '%s\n' "$reset"
+  else
+    curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 -o "$work/hopty" "$base_url/$asset"
+  fi
 elif command -v wget >/dev/null 2>&1; then
   wget -O "$work/hopty" "$base_url/$asset"
 else
@@ -79,7 +85,7 @@ done
 success "Agent connected securely"
 
 case "$status" in
-  *"Host        paired"*) success "This host is already linked.";;
+  *"Host        paired"*|*"Host        code verified"*) success "This host is already linked.";;
   *)
     printf '\n%sLink this host%s\nOpen the private URL below, enter its verification code, then create your passkey.\n\n' "$cyan" "$reset"
     "$bin_dir/hopty" pair --wait

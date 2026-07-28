@@ -22,19 +22,20 @@ import (
 )
 
 type Daemon struct {
-	home       string
-	socketPath string
-	listener   *net.UnixListener
-	lock       *os.File
-	identity   identity.Identity
-	serviceURL *url.URL
-	stateMu    sync.RWMutex
-	connected  bool
-	paired     bool
-	controlMu  sync.Mutex
-	connection *control.Session
-	terminals  *terminal.Manager
-	waitGroup  sync.WaitGroup
+	home            string
+	socketPath      string
+	listener        *net.UnixListener
+	lock            *os.File
+	identity        identity.Identity
+	serviceURL      *url.URL
+	stateMu         sync.RWMutex
+	connected       bool
+	paired          bool
+	pairingVerified bool
+	controlMu       sync.Mutex
+	connection      *control.Session
+	terminals       *terminal.Manager
+	waitGroup       sync.WaitGroup
 }
 
 func Start(home string) (*Daemon, error) {
@@ -142,7 +143,7 @@ func (d *Daemon) handle(connection *net.UnixConn) {
 	switch request.Command {
 	case "status":
 		d.stateMu.RLock()
-		response.Status = &localapi.Status{Connected: d.connected, Paired: d.paired, ActiveTerminals: len(d.terminals.ActiveIDs())}
+		response.Status = &localapi.Status{Connected: d.connected, Paired: d.paired, PairingVerified: d.pairingVerified, ActiveTerminals: len(d.terminals.ActiveIDs())}
 		d.stateMu.RUnlock()
 	case "pair":
 		response.Pairing, response.Error = d.createPairing()
@@ -157,6 +158,9 @@ func (d *Daemon) handle(connection *net.UnixConn) {
 }
 
 func (d *Daemon) createPairing() (*localapi.Pairing, string) {
+	d.stateMu.Lock()
+	d.pairingVerified = false
+	d.stateMu.Unlock()
 	d.controlMu.Lock()
 	defer d.controlMu.Unlock()
 	if d.connection == nil {
@@ -264,9 +268,12 @@ func (d *Daemon) runControl(ctx context.Context) {
 }
 
 func (d *Daemon) handleControlEvent(event control.Envelope) {
-	if event.Type == "agent.paired" {
+	if event.Type == "agent.pairing_verified" || event.Type == "agent.paired" {
 		d.stateMu.Lock()
-		d.paired = true
+		d.pairingVerified = true
+		if event.Type == "agent.paired" {
+			d.paired = true
+		}
 		d.stateMu.Unlock()
 		return
 	}

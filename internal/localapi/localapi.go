@@ -20,6 +20,7 @@ type Request struct {
 type Status struct {
 	Connected       bool `json:"connected"`
 	Paired          bool `json:"paired"`
+	PairingVerified bool `json:"pairing_verified"`
 	ActiveTerminals int  `json:"active_terminals"`
 }
 

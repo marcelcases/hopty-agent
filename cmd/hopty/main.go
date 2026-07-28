@@ -118,8 +118,8 @@ func pair(home string, wait bool) error {
 	}
 	for time.Now().Before(expiresAt) {
 		response, err := request(home, "status", false)
-		if err == nil && response.Status != nil && response.Status.Paired {
-			fmt.Print("\r\033[K✓ Pairing confirmed. Hopty is ready.\n")
+		if err == nil && response.Status != nil && response.Status.PairingVerified {
+			fmt.Print("\r\033[K✓ Verification code confirmed. Finish passkey setup in your browser.\n")
 			return nil
 		}
 		remaining := time.Until(expiresAt).Round(time.Second)
@@ -154,6 +154,9 @@ func printStatus(status localapi.Status) {
 		connection = "connected"
 	}
 	pairing := "awaiting pairing"
+	if status.PairingVerified {
+		pairing = "code verified"
+	}
 	if status.Paired {
 		pairing = "paired"
 	}

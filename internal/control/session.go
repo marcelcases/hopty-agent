@@ -34,7 +34,7 @@ func (s *Session) Run(ctx context.Context) error {
 		if envelope.Version != Version {
 			return errors.New("unsupported control version")
 		}
-		if envelope.Type == "terminal.open" || envelope.Type == "terminal.signal" || envelope.Type == "terminal.close" || envelope.Type == "agent.paired" {
+		if envelope.Type == "terminal.open" || envelope.Type == "terminal.signal" || envelope.Type == "terminal.close" || envelope.Type == "agent.pairing_verified" || envelope.Type == "agent.paired" {
 			select {
 			case s.events <- envelope:
 			case <-ctx.Done():
