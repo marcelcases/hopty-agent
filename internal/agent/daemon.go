@@ -142,7 +142,7 @@ func (d *Daemon) handle(connection *net.UnixConn) {
 	switch request.Command {
 	case "status":
 		d.stateMu.RLock()
-		response.Status = &localapi.Status{Connected: d.connected, Paired: d.paired}
+		response.Status = &localapi.Status{Connected: d.connected, Paired: d.paired, ActiveTerminals: len(d.terminals.ActiveIDs())}
 		d.stateMu.RUnlock()
 	case "pair":
 		response.Pairing, response.Error = d.createPairing()
@@ -264,6 +264,12 @@ func (d *Daemon) runControl(ctx context.Context) {
 }
 
 func (d *Daemon) handleControlEvent(event control.Envelope) {
+	if event.Type == "agent.paired" {
+		d.stateMu.Lock()
+		d.paired = true
+		d.stateMu.Unlock()
+		return
+	}
 	if d.terminals == nil {
 		return
 	}

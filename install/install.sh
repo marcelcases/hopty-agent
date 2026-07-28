@@ -8,6 +8,15 @@ umask 077
 : "${HOPTY_SHA256_ARM64:?HOPTY_SHA256_ARM64 is required}"
 : "${HOPTY_SERVICE_URL:?HOPTY_SERVICE_URL is required}"
 
+if [ -t 1 ]; then
+  green='\033[1;92m'; dim='\033[2m'; cyan='\033[1;96m'; reset='\033[0m'
+else
+  green= dim= cyan= reset=
+fi
+heading() { printf '\n%s╭─ Hopty%s\n%s│  Every shell starts with a hop.%s\n%s╰─%s\n' "$green" "$reset" "$dim" "$reset" "$green" "$reset"; }
+step() { printf '%s›%s %s\n' "$green" "$reset" "$1"; }
+success() { printf '%s✓%s %s\n' "$green" "$reset" "$1"; }
+
 case "$(uname -s)" in Linux) ;; *) echo "Hopty supports Linux only" >&2; exit 1;; esac
 case "$(uname -m)" in x86_64|amd64) arch=amd64; checksum=$HOPTY_SHA256_AMD64;; aarch64|arm64) arch=arm64; checksum=$HOPTY_SHA256_ARM64;; *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1;; esac
 
@@ -24,7 +33,16 @@ asset=hopty_linux_$arch
 work=$(mktemp -d "$home/tmp/hopty.XXXXXX")
 trap 'rm -rf "$work" "$home/tmp"' EXIT HUP INT TERM
 
-if command -v curl >/dev/null 2>&1; then curl --fail --location --proto '=https' --tlsv1.2 -o "$work/hopty" "$base_url/$asset"; elif command -v wget >/dev/null 2>&1; then wget -O "$work/hopty" "$base_url/$asset"; else echo "curl or wget is required" >&2; exit 1; fi
+heading
+step "Downloading Hopty $HOPTY_VERSION for Linux/$arch"
+if command -v curl >/dev/null 2>&1; then
+  curl --fail --location --proto '=https' --tlsv1.2 -o "$work/hopty" "$base_url/$asset"
+elif command -v wget >/dev/null 2>&1; then
+  wget -O "$work/hopty" "$base_url/$asset"
+else
+  echo "curl or wget is required" >&2
+  exit 1
+fi
 actual=$(sha256sum "$work/hopty" 2>/dev/null | awk '{print $1}' || shasum -a 256 "$work/hopty" | awk '{print $1}')
 [ "$actual" = "$checksum" ] || { echo "Hopty checksum verification failed" >&2; exit 1; }
 chmod 700 "$work/hopty"
@@ -34,7 +52,9 @@ for profile in "$HOME/.profile" "$HOME/.bashrc"; do
   [ -f "$profile" ] || : >"$profile"
   grep -Fqx 'export PATH="$HOME/.local/bin:$PATH"' "$profile" || printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >>"$profile"
 done
+success "Verified agent installed"
 
+step "Starting the local agent"
 mkdir -p "$HOME/.config/systemd/user"
 cat >"$HOME/.config/systemd/user/hopty.service" <<EOF
 [Unit]
@@ -51,11 +71,20 @@ if systemctl --user daemon-reload >/dev/null 2>&1 && systemctl --user enable hop
 attempt=0
 while :; do
   status=$("$bin_dir/hopty" status 2>/dev/null || true)
-  case "$status" in *"connected=true"*) break;; esac
+  case "$status" in *"Connection  connected"*) break;; esac
   attempt=$((attempt + 1))
   [ "$attempt" -lt 30 ] || { echo "Hopty agent did not connect within 30 seconds" >&2; exit 1; }
   sleep 1
 done
-case "$status" in *"paired=true"*) echo "Hopty agent is already paired.";; *) "$bin_dir/hopty" pair;; esac
-printf '\nHopty is available at %s/hopty. Open a new shell to use the hopty command.\n' "$local_bin"
-printf 'For persistence after logout/reboot, run once:\n  sudo loginctl enable-linger %s\n' "$(id -un)"
+success "Agent connected securely"
+
+case "$status" in
+  *"Host        paired"*) success "This host is already linked.";;
+  *)
+    printf '\n%sLink this host%s\nOpen the private URL below, enter its verification code, then create your passkey.\n\n' "$cyan" "$reset"
+    "$bin_dir/hopty" pair --wait
+    ;;
+esac
+
+printf '\n%sHopty is ready.%s Open a new shell to use %shopty%s.\n' "$green" "$reset" "$cyan" "$reset"
+printf '%sOptional:%s keep the agent running after logout with:\n  sudo loginctl enable-linger %s\n' "$dim" "$reset" "$(id -un)"
