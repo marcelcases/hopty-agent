@@ -15,5 +15,8 @@ ARG VERSION=dev
 ARG GOARCH=amd64
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/hopty ./cmd/hopty
 
+FROM scratch AS artifact
+COPY --from=build /out/hopty /hopty
+
 FROM base AS dev
 CMD ["sh"]

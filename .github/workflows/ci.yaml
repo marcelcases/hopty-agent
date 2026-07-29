@@ -34,14 +34,14 @@ jobs:
         with:
           context: .
           file: Dockerfile.dev
-          target: build
+          target: artifact
           build-args: |
             VERSION=${{ github.ref_name }}
             GOARCH=${{ matrix.arch }}
           outputs: type=local,dest=dist
       - name: Name and checksum binary
         run: |
-          mv dist/hop dist/hopty_linux_${{ matrix.arch }}
+          mv dist/hopty dist/hopty_linux_${{ matrix.arch }}
           sha256sum dist/hopty_linux_${{ matrix.arch }} > dist/hopty_linux_${{ matrix.arch }}.sha256
       - uses: actions/upload-artifact@v4
         with:
