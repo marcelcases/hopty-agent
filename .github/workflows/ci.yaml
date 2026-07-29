@@ -57,6 +57,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
+          pattern: hopty-agent-*
           path: dist
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
