@@ -18,14 +18,17 @@ import (
 )
 
 const (
-	label    = "hopty.terminal.v1"
-	maxFrame = 64 << 10
+	label      = "hopty.terminal.v1"
+	maxFrame   = 64 << 10
+	minICEPort = 55000
+	maxICEPort = 55099
 )
 
 type Manager struct {
 	mu        sync.Mutex
 	terminals map[string]*session
 	send      func(context.Context, string, any) error
+	api       *webrtc.API
 }
 type session struct {
 	mu        sync.Mutex
@@ -38,11 +41,15 @@ type session struct {
 	cmd       *exec.Cmd
 	closed    bool
 	closeOnce sync.Once
-	recovery  *time.Timer
+	recovery        *time.Timer
+	answerSent      bool
+	localCandidates []webrtc.ICECandidateInit
 }
 
 func New(send func(context.Context, string, any) error) *Manager {
-	return &Manager{terminals: make(map[string]*session), send: send}
+	settings := webrtc.SettingEngine{}
+	_ = settings.SetEphemeralUDPPortRange(minICEPort, maxICEPort)
+	return &Manager{terminals: make(map[string]*session), send: send, api: webrtc.NewAPI(webrtc.WithSettingEngine(settings))}
 }
 
 func (m *Manager) Open(open control.TerminalOpen) error {
@@ -72,6 +79,8 @@ func (m *Manager) Signal(ctx context.Context, signal control.TerminalSignal) err
 	switch signal.Kind {
 	case "offer", "ice_restart":
 		return terminal.offer(ctx, signal.Data)
+	case "candidate":
+		return terminal.candidate(signal.Data)
 	case "close":
 		terminal.close("browser_closed")
 		return nil
@@ -90,10 +99,11 @@ func (t *session) offer(ctx context.Context, raw json.RawMessage) error {
 	t.mu.Unlock()
 	if pc == nil {
 		var err error
-		pc, err = webrtc.NewPeerConnection(t.config)
+		pc, err = t.manager.api.NewPeerConnection(t.config)
 		if err != nil {
 			return err
 		}
+		pc.OnICECandidate(t.localCandidate)
 		pc.OnDataChannel(func(dc *webrtc.DataChannel) {
 			if dc.Label() != label || t.setDataChannel(dc) != nil {
 				_ = dc.Close()
@@ -113,6 +123,10 @@ func (t *session) offer(ctx context.Context, raw json.RawMessage) error {
 		t.pc = pc
 		t.mu.Unlock()
 	}
+	t.mu.Lock()
+	t.answerSent = false
+	t.localCandidates = nil
+	t.mu.Unlock()
 	if err := pc.SetRemoteDescription(description); err != nil {
 		return err
 	}
@@ -120,22 +134,62 @@ func (t *session) offer(ctx context.Context, raw json.RawMessage) error {
 	if err != nil {
 		return err
 	}
-	gathered := webrtc.GatheringCompletePromise(pc)
 	if err := pc.SetLocalDescription(answer); err != nil {
 		return err
-	}
-	select {
-	case <-gathered:
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(10 * time.Second):
-		return errors.New("ice gathering timeout")
 	}
 	encoded, err := json.Marshal(pc.LocalDescription())
 	if err != nil {
 		return err
 	}
-	return t.manager.send(ctx, "terminal.signal", control.TerminalSignal{TerminalID: t.id, Kind: "answer", Data: encoded})
+	if err := t.manager.send(ctx, "terminal.signal", control.TerminalSignal{TerminalID: t.id, Kind: "answer", Data: encoded}); err != nil {
+		return err
+	}
+	t.mu.Lock()
+	t.answerSent = true
+	candidates := append([]webrtc.ICECandidateInit(nil), t.localCandidates...)
+	t.localCandidates = nil
+	t.mu.Unlock()
+	for _, candidate := range candidates {
+		t.sendCandidate(candidate)
+	}
+	return nil
+}
+
+func (t *session) localCandidate(candidate *webrtc.ICECandidate) {
+	if candidate == nil {
+		return
+	}
+	value := candidate.ToJSON()
+	t.mu.Lock()
+	if !t.answerSent {
+		t.localCandidates = append(t.localCandidates, value)
+		t.mu.Unlock()
+		return
+	}
+	t.mu.Unlock()
+	t.sendCandidate(value)
+}
+
+func (t *session) sendCandidate(candidate webrtc.ICECandidateInit) {
+	encoded, err := json.Marshal(candidate)
+	if err != nil {
+		return
+	}
+	_ = t.manager.send(context.Background(), "terminal.signal", control.TerminalSignal{TerminalID: t.id, Kind: "candidate", Data: encoded})
+}
+
+func (t *session) candidate(raw json.RawMessage) error {
+	var candidate webrtc.ICECandidateInit
+	if err := json.Unmarshal(raw, &candidate); err != nil || candidate.Candidate == "" {
+		return errors.New("invalid candidate")
+	}
+	t.mu.Lock()
+	pc := t.pc
+	t.mu.Unlock()
+	if pc == nil || pc.RemoteDescription() == nil {
+		return errors.New("candidate before offer")
+	}
+	return pc.AddICECandidate(candidate)
 }
 
 func (t *session) setDataChannel(dc *webrtc.DataChannel) error {
