@@ -108,7 +108,7 @@ func pair(home string, wait bool) error {
 	if response.Pairing == nil {
 		return errors.New("pairing request unavailable")
 	}
-	fmt.Printf("\nOpen this private link in your browser:\n  %s\n\nVerification code: %s\n", response.Pairing.URL, response.Pairing.Code)
+	fmt.Printf("\nLink this host\nOpen the private URL below, enter its verification code, then create your passkey.\n  %s\n\nVerification code: %s\n", response.Pairing.URL, response.Pairing.Code)
 	if !wait {
 		return nil
 	}

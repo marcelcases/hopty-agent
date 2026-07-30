@@ -164,7 +164,7 @@ The service cancels any pending request for that agent, creates one request, and
 }
 ```
 
-The URL token is 32 cryptographically random bytes encoded as unpadded base64url. The verification code is exactly four case-insensitive Crockford Base32 characters from `0123456789ABCDEFGHJKMNPQRSTVWXYZ`. No separators or whitespace are valid. The pair expires exactly 60 seconds after creation.
+The URL token is 32 cryptographically random bytes encoded as unpadded base64url. The verification code is exactly four case-insensitive Crockford Base32 characters from `0123456789ABCDEFGHJKMNPQRSTVWXYZ`. No separators or whitespace are valid. The pair expires exactly two minutes after creation; the service rejects stale URLs before serving the pairing page.
 
 The service stores only a SHA-256 token digest and a request-scoped HMAC-SHA-256 code digest.
 
@@ -192,12 +192,12 @@ No browser metadata, URL token, code, credential, or WebAuthn payload appears in
 ```text
 pending --correct code before expiry--> consumed --> registration_pending --> completed
 pending --wrong/malformed/concurrent attempt--> failed
-pending --60 seconds elapsed--> expired
+pending --2 minutes elapsed--> expired
 pending --agent cancellation/new request--> cancelled
 consumed --registration cancelled/invalid/expired--> failed
 ```
 
-All terminal states are permanent. Refreshing, reopening, replaying, or concurrent use of a terminal-state link never changes it. Exactly one browser verification submission claims a pending request. A correct submission creates one registration ticket and one WebAuthn registration challenge, each valid for 60 seconds, before replying to the browser.
+All terminal states are permanent. Refreshing, reopening, replaying, or concurrent use of a terminal-state link never changes it. Exactly one browser verification submission claims a pending request. A correct submission creates one registration ticket and one WebAuthn registration challenge, each valid for two minutes, before replying to the browser.
 
 ## Credential and session revocation
 

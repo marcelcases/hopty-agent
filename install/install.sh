@@ -87,14 +87,11 @@ success "Agent connected securely"
 
 case "$status" in
   *"Host        paired"*|*"Host        code verified"*) success "This host is already linked.";;
-  *)
-    printf '\n%sLink this host%s\nOpen the private URL below, enter its verification code, then create your passkey.\n\n' "$cyan" "$reset"
-    "$bin_dir/hopty" pair --wait
-    ;;
+  *) "$bin_dir/hopty" pair --wait;;
 esac
 
 printf '\n%sHopty is ready.%s\n\n' "$green" "$reset"
-printf 'Open a new shell to use %shopty%s.\n\n' "$cyan" "$reset"
+printf 'Go to %shttps://hopty.net%s and open a new shell.\n\n' "$cyan" "$reset"
 printf '%sOptional:%s keep the agent running after logout with:\n  sudo loginctl enable-linger %s\n\n' "$dim" "$reset" "$(id -un)"
 printf 'To uninstall, run: %shopty uninstall%s\n' "$cyan" "$reset"
 printf 'To revoke, run: %shopty revoke%s\n\n' "$cyan" "$reset"
