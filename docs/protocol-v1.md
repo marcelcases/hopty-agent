@@ -140,9 +140,14 @@ The agent sends:
   "version": 1,
   "type": "pairing.create",
   "request_id": "...",
-  "payload": {}
+  "payload": {
+    "username": "marcel",
+    "hostname": "vps.example"
+  }
 }
 ```
+
+`username` and `hostname` are obtained locally by the agent and sent only after its control connection has authenticated. The service uses them to label a newly registered passkey as `username@hostname`; pairing-page input never controls that label. Older agents may send an empty payload and retain the `Hopty` fallback label.
 
 The service cancels any pending request for that agent, creates one request, and returns raw material exactly once:
 
@@ -152,7 +157,7 @@ The service cancels any pending request for that agent, creates one request, and
   "type": "pairing.created",
   "request_id": "...",
   "payload": {
-    "pairing_url": "https://622492695.xyz/pair/base64url-32-byte-token",
+    "pairing_url": "https://hopty.net/pair/base64url-32-byte-token",
     "verification_code": "X97C",
     "expires_at": "2026-01-01T00:00:00Z"
   }

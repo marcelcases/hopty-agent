@@ -13,7 +13,7 @@ if [ -t 1 ]; then
 else
   green= dim= cyan= reset=
 fi
-heading() { printf '\n%s╭─ Hopty%s\n%s│  Every shell starts with a hop.%s\n%s╰─%s\n' "$green" "$reset" "$dim" "$reset" "$green" "$reset"; }
+heading() { printf '\n%s╭─ Hopty%s\n%s│  One hop to your shell.%s\n%s╰─%s\n' "$green" "$reset" "$dim" "$reset" "$green" "$reset"; }
 step() { printf '%s›%s %s\n' "$green" "$reset" "$1"; }
 success() { printf '%s✓%s %s\n' "$green" "$reset" "$1"; }
 
@@ -61,6 +61,7 @@ done
 success "Verified agent installed"
 
 step "Starting the local agent"
+printf '%s  Connection timeout: 30 seconds%s\n' "$dim" "$reset"
 mkdir -p "$HOME/.config/systemd/user"
 cat >"$HOME/.config/systemd/user/hopty.service" <<EOF
 [Unit]
@@ -92,5 +93,8 @@ case "$status" in
     ;;
 esac
 
-printf '\n%sHopty is ready.%s Open a new shell to use %shopty%s.\n' "$green" "$reset" "$cyan" "$reset"
-printf '%sOptional:%s keep the agent running after logout with:\n  sudo loginctl enable-linger %s\n' "$dim" "$reset" "$(id -un)"
+printf '\n%sHopty is ready.%s\n\n' "$green" "$reset"
+printf 'Open a new shell to use %shopty%s.\n\n' "$cyan" "$reset"
+printf '%sOptional:%s keep the agent running after logout with:\n  sudo loginctl enable-linger %s\n\n' "$dim" "$reset" "$(id -un)"
+printf 'To uninstall, run: %shopty uninstall%s\n' "$cyan" "$reset"
+printf 'To revoke, run: %shopty revoke%s\n\n' "$cyan" "$reset"

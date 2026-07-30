@@ -18,6 +18,6 @@ make dev
 
 ## Installation
 
-The immutable service installer injects a release version, SHA-256 digest, and service origin before it is served as `/install.sh`. It installs under `~/.hopty/`, verifies the binary, starts a user service when available, then runs `hopty pair`. It never invokes `sudo`; it only prints the optional `loginctl enable-linger` command.
+The immutable service installer injects a release version, SHA-256 digest, and service origin before it is served as `/install.sh`. It installs under `~/.hopty/`, verifies the binary, starts a user service when available, then runs `hopty pair`. It never invokes `sudo`; it only prints the optional `loginctl enable-linger` command. During pairing, the agent supplies its local Unix username and hostname on its authenticated control connection so the newly created passkey is labelled `user@hostname`.
 
 Direct WebRTC uses agent UDP ports `55000-55099`. Hosts with a default-deny firewall must allow that inbound range at both host and provider firewalls to avoid TURN relay fallback. Terminal traffic remains DTLS-encrypted. No firewall change is needed when relayed operation is acceptable.

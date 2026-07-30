@@ -12,9 +12,9 @@ type PairingCreated struct {
 	ExpiresAt        time.Time `json:"expires_at"`
 }
 
-func CreatePairing(ctx context.Context, session *Session) (PairingCreated, error) {
+func CreatePairing(ctx context.Context, session *Session, request PairingCreate) (PairingCreated, error) {
 	var created PairingCreated
-	if err := session.request(ctx, "pairing.create", map[string]any{}, "pairing.created", &created); err != nil {
+	if err := session.request(ctx, "pairing.create", request, "pairing.created", &created); err != nil {
 		return PairingCreated{}, err
 	}
 	if created.PairingURL == "" || len(created.VerificationCode) != 4 {

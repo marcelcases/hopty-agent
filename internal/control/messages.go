@@ -27,6 +27,11 @@ type Hello struct {
 type Challenge struct {
 	Nonce string `json:"nonce"`
 }
+
+type PairingCreate struct {
+	Username string `json:"username"`
+	Hostname string `json:"hostname"`
+}
 type Proof struct {
 	Signature string `json:"signature"`
 }

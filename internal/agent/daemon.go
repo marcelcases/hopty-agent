@@ -168,7 +168,7 @@ func (d *Daemon) createPairing() (*localapi.Pairing, string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	created, err := control.CreatePairing(ctx, d.connection)
+	created, err := control.CreatePairing(ctx, d.connection, pairingIdentity())
 	if err != nil {
 		return nil, "agent control connection is unavailable"
 	}
