@@ -160,7 +160,9 @@ func printStatus(status localapi.Status) {
 	if status.Paired {
 		pairing = "paired"
 	}
-	fmt.Printf("Hopty status\n  Connection  %s\n  Host        %s\n  Terminals   %d active\n", connection, pairing, status.ActiveTerminals)
+	accent := "\033[38;2;232;138;69m"
+	reset := "\033[0m"
+	fmt.Printf("%sHopty Agent is active%s\n\nGo to %shopty.net%s to access your terminal\n\nConnection          %s\nHost                %s\nActive sessions     %d\n", accent, reset, accent, reset, connection, pairing, status.ActiveTerminals)
 }
 
 func defaultHome() string {
