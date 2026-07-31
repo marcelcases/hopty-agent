@@ -9,13 +9,13 @@ umask 077
 : "${HOPTY_SERVICE_URL:?HOPTY_SERVICE_URL is required}"
 
 if [ -t 1 ]; then
-  green=$(printf '\033[1;92m'); dim=$(printf '\033[2m'); cyan=$(printf '\033[1;96m'); reset=$(printf '\033[0m')
+  accent=$(printf '\033[1;38;2;232;138;69m'); dim=$(printf '\033[2m'); cyan=$(printf '\033[1;96m'); reset=$(printf '\033[0m')
 else
-  green= dim= cyan= reset=
+  accent= dim= cyan= reset=
 fi
-heading() { printf '\n%s╭─ Hopty%s\n%s│  One hop to your shell.%s\n%s╰─%s\n' "$green" "$reset" "$dim" "$reset" "$green" "$reset"; }
-step() { printf '%s›%s %s\n' "$green" "$reset" "$1"; }
-success() { printf '%s✓%s %s\n' "$green" "$reset" "$1"; }
+heading() { printf '\n%s╭─ Hopty%s\n%s│  One hop to your shell.%s\n%s╰─%s\n' "$accent" "$reset" "$dim" "$reset" "$accent" "$reset"; }
+step() { printf '%s›%s %s\n' "$accent" "$reset" "$1"; }
+success() { printf '%s✓%s %s\n' "$accent" "$reset" "$1"; }
 
 case "$(uname -s)" in Linux) ;; *) echo "Hopty supports Linux only" >&2; exit 1;; esac
 case "$(uname -m)" in x86_64|amd64) arch=amd64; checksum=$HOPTY_SHA256_AMD64;; aarch64|arm64) arch=arm64; checksum=$HOPTY_SHA256_ARM64;; *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1;; esac
@@ -37,7 +37,7 @@ heading
 step "Downloading Hopty $HOPTY_VERSION for Linux/$arch"
 if command -v curl >/dev/null 2>&1; then
   if [ -t 1 ]; then
-    printf '%s' "$green"
+    printf '%s' "$accent"
     curl --fail --location --proto '=https' --tlsv1.2 --progress-bar -o "$work/hopty" "$base_url/$asset"
     printf '%s\n' "$reset"
   else
@@ -78,7 +78,7 @@ if systemctl --user daemon-reload >/dev/null 2>&1 && systemctl --user enable hop
 attempt=0
 while :; do
   status=$("$bin_dir/hopty" status 2>/dev/null || true)
-  case "$status" in *"Connection  connected"*) break;; esac
+  case "$status" in *"Connection"*"connected"*) break;; esac
   attempt=$((attempt + 1))
   [ "$attempt" -lt 30 ] || { echo "Hopty agent did not connect within 30 seconds" >&2; exit 1; }
   sleep 1
@@ -90,7 +90,7 @@ case "$status" in
   *) "$bin_dir/hopty" pair --wait;;
 esac
 
-printf '\n%sHopty is ready.%s\n\n' "$green" "$reset"
+printf '\n%sHopty is ready.%s\n\n' "$accent" "$reset"
 printf 'Go to %shttps://hopty.net%s and open a new shell.\n\n' "$cyan" "$reset"
 printf '%sOptional:%s keep the agent running after logout with:\n  sudo loginctl enable-linger %s\n\n' "$dim" "$reset" "$(id -un)"
 printf 'To uninstall, run: %shopty uninstall%s\n' "$cyan" "$reset"
