@@ -9,9 +9,9 @@ umask 077
 : "${HOPTY_SERVICE_URL:?HOPTY_SERVICE_URL is required}"
 
 if [ -t 1 ]; then
-  accent=$(printf '\033[1;38;2;232;138;69m'); dim=$(printf '\033[2m'); cyan=$(printf '\033[1;96m'); reset=$(printf '\033[0m')
+  accent=$(printf '\033[1;38;2;232;138;69m'); dim=$(printf '\033[2m'); reset=$(printf '\033[0m')
 else
-  accent= dim= cyan= reset=
+  accent= dim= reset=
 fi
 heading() { printf '\n%s╭─ Hopty%s\n%s│  One hop to your shell.%s\n%s╰─%s\n' "$accent" "$reset" "$dim" "$reset" "$accent" "$reset"; }
 step() { printf '%s›%s %s\n' "$accent" "$reset" "$1"; }
@@ -91,7 +91,7 @@ case "$status" in
 esac
 
 printf '\n%sHopty is ready.%s\n\n' "$accent" "$reset"
-printf 'Go to %shttps://hopty.net%s and open a new shell.\n\n' "$cyan" "$reset"
+printf 'Go to %shttps://hopty.net%s and open a new shell.\n\n' "$accent" "$reset"
 printf '%sOptional:%s keep the agent running after logout with:\n  sudo loginctl enable-linger %s\n\n' "$dim" "$reset" "$(id -un)"
-printf 'To uninstall, run: %shopty uninstall%s\n' "$cyan" "$reset"
-printf 'To revoke, run: %shopty revoke%s\n\n' "$cyan" "$reset"
+printf 'To uninstall, run: %shopty uninstall%s\n' "$accent" "$reset"
+printf 'To revoke, run: %shopty revoke%s\n\n' "$accent" "$reset"
