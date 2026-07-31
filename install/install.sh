@@ -86,7 +86,7 @@ done
 success "Agent connected securely"
 
 case "$status" in
-  *"Host        paired"*|*"Host        code verified"*) success "This host is already linked.";;
+  *"Host"*"paired"*|*"Host"*"code verified"*) success "This host is already linked.";;
   *) "$bin_dir/hopty" pair --wait;;
 esac
 
