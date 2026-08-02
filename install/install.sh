@@ -69,7 +69,7 @@ ln -sfn "$bin_dir/hopty" "$local_bin/hopty"
 success "Verified agent installed"
 
 step "Starting the local agent"
-printf '%s  Pairing will retry for up to 35 seconds if the agent is still connecting%s\n' "$dim" "$reset"
+printf '%s  Waiting up to 35 seconds for the local agent to start%s\n' "$dim" "$reset"
 mkdir -p "$HOME/.config/systemd/user"
 cat >"$HOME/.config/systemd/user/hopty.service" <<EOF
 [Unit]
@@ -83,7 +83,18 @@ WantedBy=default.target
 EOF
 
 if systemctl --user daemon-reload >/dev/null 2>&1 && systemctl --user enable hopty.service >/dev/null 2>&1 && systemctl --user restart hopty.service >/dev/null 2>&1; then :; else nohup "$bin_dir/hopty" agent >"$home/agent.log" 2>&1 & fi
-status=$("$bin_dir/hopty" status 2>/dev/null || true)
+attempt=0
+while :; do
+  status=$("$bin_dir/hopty" status 2>/dev/null || true)
+  [ -n "$status" ] && break
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge 35 ]; then
+    echo "Hopty agent did not start within 35 seconds" >&2
+    [ -s "$home/agent.log" ] && tail -n 20 "$home/agent.log" >&2 || true
+    exit 1
+  fi
+  sleep 1
+done
 success "Agent process started"
 
 case "$status" in
