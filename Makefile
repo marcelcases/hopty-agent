@@ -1,9 +1,6 @@
 IMAGE := hopty-dev
 
-.PHONY: dev test spike-test build down reset
-
-spike-test:
-	docker build --target test -f Dockerfile.spike .
+.PHONY: dev test build down reset
 
 dev:
 	docker build --target dev -t $(IMAGE) -f Dockerfile.dev .
