@@ -76,6 +76,30 @@ func TestPrintStatusWithSession(t *testing.T) {
 	}
 }
 
+func TestPrintStatusWithMultipleSessionsUsesOneSummary(t *testing.T) {
+	output := captureOutput(t, func() {
+		printStatus(localapi.Status{AgentVersion: "v0.1.0-beta.1", Paired: true, Sessions: []localapi.SessionStatus{
+			{User: "marcel@rpi", Connection: "direct", Transport: "WebRTC", LatencyMS: 5, IncomingIP: "152.53.252.14"},
+			{User: "marcel@phone", Connection: "relayed", Transport: "TURN", LatencyMS: 8, IncomingIP: "203.0.113.7"},
+		}})
+	})
+	for _, field := range []string{
+		"Active sessions     2",
+		"User                multiple",
+		"Connection          mixed",
+		"Transport           mixed",
+		"Latency             7 ms average",
+		"Incoming IP         multiple",
+	} {
+		if !strings.Contains(output, field) {
+			t.Fatalf("status output %q does not contain %q", output, field)
+		}
+	}
+	if strings.Count(output, "User                ") != 1 {
+		t.Fatalf("status output replicated session details: %q", output)
+	}
+}
+
 func captureOutput(t *testing.T, callback func()) string {
 	t.Helper()
 	original := os.Stdout

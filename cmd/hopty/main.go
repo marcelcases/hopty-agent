@@ -188,14 +188,41 @@ func printStatus(status localapi.Status) {
 		return
 	}
 	fmt.Printf("Active sessions     %d\n\n", len(status.Sessions))
-	for index, session := range status.Sessions {
-		if index > 0 {
-			fmt.Println()
-		}
-		fmt.Printf("User                %s\nConnection          %s\nTransport           %s\nLatency             %d ms\nIncoming IP         %s\n", valueOr(session.User, "unknown"), valueOr(session.Connection, "unknown"), valueOr(session.Transport, "unknown"), session.LatencyMS, valueOr(session.IncomingIP, "unknown"))
+	session := summarizeSessions(status.Sessions)
+	latency := fmt.Sprintf("%d ms", session.LatencyMS)
+	if len(status.Sessions) > 1 {
+		latency += " average"
 	}
+	fmt.Printf("User                %s\nConnection          %s\nTransport           %s\nLatency             %s\nIncoming IP         %s\n", valueOr(session.User, "unknown"), valueOr(session.Connection, "unknown"), valueOr(session.Transport, "unknown"), latency, valueOr(session.IncomingIP, "unknown"))
 	printStatusTimes(status)
 	fmt.Print("\nTo revoke passkey, run hopty revoke\nTo uninstall, run hopty uninstall\n")
+}
+
+func summarizeSessions(sessions []localapi.SessionStatus) localapi.SessionStatus {
+	if len(sessions) == 0 {
+		return localapi.SessionStatus{}
+	}
+	summary := localapi.SessionStatus{
+		User:       summarizeSessionField(sessions, func(session localapi.SessionStatus) string { return session.User }, "multiple"),
+		Connection: summarizeSessionField(sessions, func(session localapi.SessionStatus) string { return session.Connection }, "mixed"),
+		Transport:  summarizeSessionField(sessions, func(session localapi.SessionStatus) string { return session.Transport }, "mixed"),
+		IncomingIP: summarizeSessionField(sessions, func(session localapi.SessionStatus) string { return session.IncomingIP }, "multiple"),
+	}
+	for _, session := range sessions {
+		summary.LatencyMS += session.LatencyMS
+	}
+	summary.LatencyMS = (summary.LatencyMS + len(sessions)/2) / len(sessions)
+	return summary
+}
+
+func summarizeSessionField(sessions []localapi.SessionStatus, value func(localapi.SessionStatus) string, different string) string {
+	first := value(sessions[0])
+	for _, session := range sessions[1:] {
+		if value(session) != first {
+			return different
+		}
+	}
+	return first
 }
 
 func printStatusTimes(status localapi.Status) {
