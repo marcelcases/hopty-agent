@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -91,6 +92,11 @@ func runAgent(home string) error {
 		return err
 	}
 	defer daemon.Close()
+	pidPath := filepath.Join(home, "run", "agent.pid")
+	if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600); err != nil {
+		return err
+	}
+	defer os.Remove(pidPath)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	return daemon.Run(ctx)
@@ -217,7 +223,7 @@ func uninstall(home string) error {
 	if _, err := request(home, "revoke", true); err != nil && !strings.Contains(err.Error(), "agent is not running") {
 		return err
 	}
-	if err := stopUserService(); err != nil {
+	if err := stopUserService(home); err != nil {
 		return err
 	}
 	userHome, err := os.UserHomeDir()
@@ -253,19 +259,58 @@ func uninstall(home string) error {
 	return nil
 }
 
-func stopUserService() error {
-	if _, err := exec.LookPath("systemctl"); err != nil {
+func stopUserService(home string) error {
+	if _, err := exec.LookPath("systemctl"); err == nil {
+		status := exec.Command("systemctl", "--user", "is-active", "--quiet", "hopty.service").Run()
+		if status == nil {
+			if err := exec.Command("systemctl", "--user", "disable", "--now", "hopty.service").Run(); err != nil {
+				return fmt.Errorf("could not stop hopty.service: %w", err)
+			}
+		} else {
+			_ = exec.Command("systemctl", "--user", "disable", "hopty.service").Run()
+		}
+		_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+	}
+	return stopAgentProcesses(home)
+}
+
+func stopAgentProcesses(home string) error {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
 		return nil
 	}
-	status := exec.Command("systemctl", "--user", "is-active", "--quiet", "hopty.service").Run()
-	if status == nil {
-		if err := exec.Command("systemctl", "--user", "disable", "--now", "hopty.service").Run(); err != nil {
-			return fmt.Errorf("could not stop hopty.service: %w", err)
+	commandPath := filepath.Join(home, "bin", "hopty")
+	for _, entry := range entries {
+		pid, parseErr := strconv.Atoi(entry.Name())
+		if parseErr != nil || pid == os.Getpid() {
+			continue
 		}
-	} else {
-		_ = exec.Command("systemctl", "--user", "disable", "hopty.service").Run()
+		command, readErr := os.ReadFile(filepath.Join("/proc", entry.Name(), "cmdline"))
+		arguments := strings.Split(string(command), "\x00")
+		agentProcess := false
+		for _, argument := range arguments[1:] {
+			if argument == "agent" {
+				agentProcess = true
+				break
+			}
+		}
+		if readErr != nil || !strings.Contains(string(command), commandPath) || !agentProcess {
+			continue
+		}
+		if err := syscall.Kill(pid, syscall.SIGTERM); err != nil && !errors.Is(err, syscall.ESRCH) {
+			return fmt.Errorf("could not stop hopty agent: %w", err)
+		}
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		if err := syscall.Kill(pid, 0); err == nil {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+		}
 	}
-	_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
 	return nil
 }
 
