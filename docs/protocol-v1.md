@@ -231,7 +231,7 @@ The agent sends `credential.revoke` with an empty payload. The service disables 
 ```json
 {
   "version": 1,
-  "type": "terminal.terminate",
+  "type": "terminal.close",
   "request_id": "...",
   "payload": {
     "terminal_id": "opaque-terminal-id",
