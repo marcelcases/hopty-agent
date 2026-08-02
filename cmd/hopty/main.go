@@ -261,15 +261,19 @@ func uninstall(home string) error {
 
 func stopUserService(home string) error {
 	if _, err := exec.LookPath("systemctl"); err == nil {
-		status := exec.Command("systemctl", "--user", "is-active", "--quiet", "hopty.service").Run()
-		if status == nil {
-			if err := exec.Command("systemctl", "--user", "disable", "--now", "hopty.service").Run(); err != nil {
-				return fmt.Errorf("could not stop hopty.service: %w", err)
+		commandPath := filepath.Join(home, "bin", "hopty")
+		unitPath, showErr := exec.Command("systemctl", "--user", "show", "hopty.service", "-p", "ExecStart", "--value").Output()
+		if showErr == nil && strings.Contains(string(unitPath), commandPath) {
+			status := exec.Command("systemctl", "--user", "is-active", "--quiet", "hopty.service").Run()
+			if status == nil {
+				if err := exec.Command("systemctl", "--user", "disable", "--now", "hopty.service").Run(); err != nil {
+					return fmt.Errorf("could not stop hopty.service: %w", err)
+				}
+			} else {
+				_ = exec.Command("systemctl", "--user", "disable", "hopty.service").Run()
 			}
-		} else {
-			_ = exec.Command("systemctl", "--user", "disable", "hopty.service").Run()
+			_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
 		}
-		_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
 	}
 	return stopAgentProcesses(home)
 }
