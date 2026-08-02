@@ -1,6 +1,6 @@
 IMAGE := hopty-dev
 
-.PHONY: dev test build down reset
+.PHONY: dev test build
 
 dev:
 	docker build --target dev -t $(IMAGE) -f Dockerfile.dev .
@@ -12,8 +12,3 @@ test:
 build:
 	docker build --target build -f Dockerfile.dev .
 
-down:
-	@true
-
-reset:
-	@true

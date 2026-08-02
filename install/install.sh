@@ -93,5 +93,5 @@ esac
 printf '\n%sHopty is ready.%s\n\n' "$accent" "$reset"
 printf 'Go to %shttps://hopty.net%s and open a new shell.\n\n' "$accent" "$reset"
 printf '%sOptional:%s keep the agent running after logout with:\n  sudo loginctl enable-linger %s\n\n' "$dim" "$reset" "$(id -un)"
-printf 'To uninstall, run: %shopty uninstall%s\n' "$accent" "$reset"
+printf 'To uninstall, remove %s~/.hopty%s\n' "$accent" "$reset"
 printf 'To revoke, run: %shopty revoke%s\n\n' "$accent" "$reset"
