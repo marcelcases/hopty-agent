@@ -64,3 +64,13 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
+      - name: Refresh staging Pages deployment
+        env:
+          HOPTY_PAGES_STAGING_DEPLOY_HOOK: ${{ secrets.HOPTY_PAGES_STAGING_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOPTY_PAGES_STAGING_DEPLOY_HOOK" ]; then
+            echo "staging Pages deploy hook is not configured; skipping refresh"
+          else
+            curl --fail --silent --show-error --retry 3 --request POST "$HOPTY_PAGES_STAGING_DEPLOY_HOOK" --output /dev/null
+            echo "staging Pages refresh requested"
+          fi

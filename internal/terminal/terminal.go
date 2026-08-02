@@ -18,10 +18,11 @@ import (
 )
 
 const (
-	label      = "hopty.terminal.v1"
-	maxFrame   = 64 << 10
-	minICEPort = 55000
-	maxICEPort = 55099
+	label          = "hopty.terminal.v1"
+	maxFrame       = 64 << 10
+	minICEPort     = 55000
+	maxICEPort     = 55099
+	recoveryWindow = 10 * time.Second
 )
 
 type Manager struct {
@@ -31,16 +32,16 @@ type Manager struct {
 	api       *webrtc.API
 }
 type session struct {
-	mu        sync.Mutex
-	id        string
-	config    webrtc.Configuration
-	manager   *Manager
-	pc        *webrtc.PeerConnection
-	dc        *webrtc.DataChannel
-	pty       *os.File
-	cmd       *exec.Cmd
-	closed    bool
-	closeOnce sync.Once
+	mu              sync.Mutex
+	id              string
+	config          webrtc.Configuration
+	manager         *Manager
+	pc              *webrtc.PeerConnection
+	dc              *webrtc.DataChannel
+	pty             *os.File
+	cmd             *exec.Cmd
+	closed          bool
+	closeOnce       sync.Once
 	recovery        *time.Timer
 	answerSent      bool
 	localCandidates []webrtc.ICECandidateInit
@@ -82,7 +83,7 @@ func (m *Manager) Signal(ctx context.Context, signal control.TerminalSignal) err
 	case "candidate":
 		return terminal.candidate(signal.Data)
 	case "close":
-		terminal.close("browser_closed")
+		terminal.close(closeReason(signal.Data))
 		return nil
 	default:
 		return errors.New("unsupported signal")
@@ -192,6 +193,16 @@ func (t *session) candidate(raw json.RawMessage) error {
 	return pc.AddICECandidate(candidate)
 }
 
+func closeReason(data json.RawMessage) string {
+	var request struct {
+		Reason string `json:"reason"`
+	}
+	if json.Unmarshal(data, &request) == nil && request.Reason != "" && len(request.Reason) <= 64 {
+		return request.Reason
+	}
+	return "browser_closed"
+}
+
 func (t *session) setDataChannel(dc *webrtc.DataChannel) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -288,7 +299,7 @@ func (t *session) connectionState(state webrtc.PeerConnectionState) {
 	case webrtc.PeerConnectionStateDisconnected, webrtc.PeerConnectionStateFailed:
 		t.mu.Lock()
 		if t.recovery == nil && !t.closed {
-			t.recovery = time.AfterFunc(30*time.Second, func() { t.close("recovery_timeout") })
+			t.recovery = time.AfterFunc(recoveryWindow, func() { t.close("recovery_timeout") })
 		}
 		t.mu.Unlock()
 	case webrtc.PeerConnectionStateConnected:
@@ -325,7 +336,12 @@ func (t *session) close(reason string) {
 		t.manager.mu.Unlock()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = t.manager.send(ctx, "terminal.signal", control.TerminalSignal{TerminalID: t.id, Kind: "close", Data: json.RawMessage(`{"reason":"` + reason + `"}`)})
+		data, err := json.Marshal(struct {
+			Reason string `json:"reason"`
+		}{Reason: reason})
+		if err == nil {
+			_ = t.manager.send(ctx, "terminal.signal", control.TerminalSignal{TerminalID: t.id, Kind: "close", Data: data})
+		}
 	})
 }
 func (m *Manager) ActiveIDs() []string {

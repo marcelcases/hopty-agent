@@ -157,14 +157,14 @@ The service cancels any pending request for that agent, creates one request, and
   "type": "pairing.created",
   "request_id": "...",
   "payload": {
-    "pairing_url": "https://hopty.net/pair/base64url-32-byte-token",
+    "pairing_url": "https://hopty.net/pair#base64url-32-byte-token",
     "verification_code": "X97C",
     "expires_at": "2026-01-01T00:00:00Z"
   }
 }
 ```
 
-The URL token is 32 cryptographically random bytes encoded as unpadded base64url. The verification code is exactly four case-insensitive Crockford Base32 characters from `0123456789ABCDEFGHJKMNPQRSTVWXYZ`. No separators or whitespace are valid. The pair expires exactly two minutes after creation; the service rejects stale URLs before serving the pairing page.
+The URL token is 32 cryptographically random bytes encoded as unpadded base64url and is carried only in the URL fragment, so browsers never send it in an HTTP request path or referrer. The browser posts the token and code to the API verification endpoint in a bounded JSON body. The verification code is exactly four case-insensitive Crockford Base32 characters from `0123456789ABCDEFGHJKMNPQRSTVWXYZ`. No separators or whitespace are valid. The pair expires exactly two minutes after creation; the service rejects stale tokens with `410 Gone` during API verification.
 
 The service stores only a SHA-256 token digest and a request-scoped HMAC-SHA-256 code digest.
 

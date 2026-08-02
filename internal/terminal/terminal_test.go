@@ -1,6 +1,18 @@
 package terminal
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
+
+func TestCloseReasonAcceptsLeaseExpiry(t *testing.T) {
+	if reason := closeReason(json.RawMessage(`{"reason":"lease_expired"}`)); reason != "lease_expired" {
+		t.Fatalf("reason = %q", reason)
+	}
+	if reason := closeReason(json.RawMessage(`{"reason":""}`)); reason != "browser_closed" {
+		t.Fatalf("empty reason = %q", reason)
+	}
+}
 
 func TestTerminalEnvironmentSetsTerminalCapabilities(t *testing.T) {
 	environment := terminalEnvironment([]string{"PATH=/usr/bin", "TERM=dumb", "COLORTERM=none", "TERM_PROGRAM=other"})
