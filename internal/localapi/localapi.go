@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"time"
 )
 
 const MaxMessageBytes = 4096
@@ -18,10 +19,22 @@ type Request struct {
 }
 
 type Status struct {
-	Connected       bool `json:"connected"`
-	Paired          bool `json:"paired"`
-	PairingVerified bool `json:"pairing_verified"`
-	ActiveTerminals int  `json:"active_terminals"`
+	AgentVersion     string          `json:"agent_version"`
+	Connected        bool            `json:"connected"`
+	Paired           bool            `json:"paired"`
+	PairingVerified  bool            `json:"pairing_verified"`
+	ActiveTerminals  int             `json:"active_terminals"`
+	PasskeyCreatedAt *time.Time      `json:"passkey_created_at,omitempty"`
+	LastAccessAt     *time.Time      `json:"last_access_at,omitempty"`
+	Sessions         []SessionStatus `json:"sessions,omitempty"`
+}
+
+type SessionStatus struct {
+	User       string `json:"user"`
+	Connection string `json:"connection"`
+	Transport  string `json:"transport"`
+	LatencyMS  int    `json:"latency_ms"`
+	IncomingIP string `json:"incoming_ip"`
 }
 
 type Pairing struct {

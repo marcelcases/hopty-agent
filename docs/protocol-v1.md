@@ -199,9 +199,34 @@ consumed --registration cancelled/invalid/expired--> failed
 
 All terminal states are permanent. Refreshing, reopening, replaying, or concurrent use of a terminal-state link never changes it. Exactly one browser verification submission claims a pending request. A correct submission creates one registration ticket and one WebAuthn registration challenge, each valid for two minutes, before replying to the browser.
 
-## Credential and session revocation
+## Agent status and credential revocation
 
-The agent sends `credential.revoke` with an empty payload. The service disables the credential, revokes every browser session and terminal lease for the agent, then sends the agent one `terminal.terminate` event per active terminal:
+The agent may request its current status with `agent.status` and an empty payload. The service replies with `agent.status`:
+
+```json
+{
+  "version": 1,
+  "type": "agent.status",
+  "request_id": "...",
+  "payload": {
+    "agent_version": "v0.1.0-beta.1",
+    "paired": true,
+    "passkey_created_at": "2026-07-10T10:30:14Z",
+    "last_access_at": "2026-07-08T19:08:22Z",
+    "sessions": [{
+      "user": "marcel@vps",
+      "connection": "direct|relayed",
+      "transport": "WebRTC|TURN",
+      "latency_ms": 5,
+      "incoming_ip": "203.0.113.7"
+    }]
+  }
+}
+```
+
+`last_access_at` and the timestamp fields may be omitted when no value exists. Active sessions contain connection metadata only; terminal bytes never appear in status messages.
+
+The agent sends `credential.revoke` with an empty payload. The service disables the credential, revokes every browser session and terminal lease for the agent, then sends the agent one `terminal.close` event per active terminal:
 
 ```json
 {
@@ -215,7 +240,7 @@ The agent sends `credential.revoke` with an empty payload. The service disables 
 }
 ```
 
-Successful passkey replacement follows the same durable revocation rule before the new browser session is issued. An agent must terminate any terminal listed in `terminal.terminate`; after reconnect it must also terminate every locally active terminal not present in the service's accepted resynchronization response.
+Successful passkey replacement follows the same durable revocation rule before the new browser session is issued. An agent must terminate any terminal listed in `terminal.close`; after reconnect it must also terminate every locally active terminal not present in the service's accepted resynchronization response.
 
 ## Browser terminal lifecycle and signaling
 
@@ -306,6 +331,16 @@ The browser creates the offer and the agent creates the answer. All signaling pa
 ```
 
 A candidate may use `null` `candidate`, `sdp_mid`, and `sdp_mline_index` only to signal end-of-candidates. The service validates ownership, message sequence, lengths, and candidate count but does not persist, log, alter, or proxy SDP/candidates beyond forwarding the in-memory message.
+
+### Connection status
+
+After the DataChannel opens, the browser sends a bounded signaling status message every few seconds:
+
+```json
+{"type":"status","data":{"connection":"direct|relayed","transport":"WebRTC|TURN","latency_ms":5}}
+```
+
+The service stores only these control-plane fields for `hopty status`; it never stores or forwards terminal DataChannel bytes.
 
 ### Closure and resynchronization
 

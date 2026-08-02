@@ -28,6 +28,7 @@ type Daemon struct {
 	lock            *os.File
 	identity        identity.Identity
 	serviceURL      *url.URL
+	agentVersion    string
 	stateMu         sync.RWMutex
 	connected       bool
 	paired          bool
@@ -38,7 +39,7 @@ type Daemon struct {
 	waitGroup       sync.WaitGroup
 }
 
-func Start(home string) (*Daemon, error) {
+func Start(home string, versions ...string) (*Daemon, error) {
 	identityValue, err := identity.LoadOrCreate(home)
 	if err != nil {
 		return nil, err
@@ -75,7 +76,11 @@ func Start(home string) (*Daemon, error) {
 		lock.Close()
 		return nil, err
 	}
-	daemon := &Daemon{home: home, socketPath: socketPath, listener: listener, lock: lock, identity: identityValue, serviceURL: serviceURL}
+	agentVersion := "dev"
+	if len(versions) > 0 && versions[0] != "" {
+		agentVersion = versions[0]
+	}
+	daemon := &Daemon{home: home, socketPath: socketPath, listener: listener, lock: lock, identity: identityValue, serviceURL: serviceURL, agentVersion: agentVersion}
 	daemon.terminals = terminal.New(func(ctx context.Context, typ string, payload any) error {
 		daemon.controlMu.Lock()
 		defer daemon.controlMu.Unlock()
@@ -142,19 +147,67 @@ func (d *Daemon) handle(connection *net.UnixConn) {
 	response := localapi.Response{}
 	switch request.Command {
 	case "status":
-		d.stateMu.RLock()
-		response.Status = &localapi.Status{Connected: d.connected, Paired: d.paired, PairingVerified: d.pairingVerified, ActiveTerminals: len(d.terminals.ActiveIDs())}
-		d.stateMu.RUnlock()
+		response.Status = d.status()
 	case "pair":
 		response.Pairing, response.Error = d.createPairing()
 	case "cancel":
 		response.Error = d.cancelPairing()
 	case "revoke":
-		response.Error = "credential revocation is unavailable"
+		response.Error = d.revoke()
 	default:
 		response.Error = "unknown command"
 	}
 	_ = localapi.WriteResponse(connection, response)
+}
+
+func (d *Daemon) status() *localapi.Status {
+	d.stateMu.RLock()
+	status := &localapi.Status{AgentVersion: d.agentVersion, Connected: d.connected, Paired: d.paired, PairingVerified: d.pairingVerified, ActiveTerminals: len(d.terminals.ActiveIDs())}
+	d.stateMu.RUnlock()
+	if !status.Connected || !status.Paired {
+		return status
+	}
+	d.controlMu.Lock()
+	connection := d.connection
+	d.controlMu.Unlock()
+	if connection == nil {
+		return status
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	remote, err := control.GetStatus(ctx, connection)
+	cancel()
+	if err != nil {
+		return status
+	}
+	status.AgentVersion = remote.AgentVersion
+	status.Paired = remote.Paired
+	status.PasskeyCreatedAt = remote.PasskeyCreatedAt
+	status.LastAccessAt = remote.LastAccessAt
+	status.Sessions = make([]localapi.SessionStatus, 0, len(remote.Sessions))
+	for _, session := range remote.Sessions {
+		status.Sessions = append(status.Sessions, localapi.SessionStatus{User: session.User, Connection: session.Connection, Transport: session.Transport, LatencyMS: session.LatencyMS, IncomingIP: session.IncomingIP})
+	}
+	return status
+}
+
+func (d *Daemon) revoke() string {
+	d.controlMu.Lock()
+	connection := d.connection
+	d.controlMu.Unlock()
+	if connection == nil {
+		return "agent control connection is unavailable"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	err := control.RevokeCredential(ctx, connection)
+	cancel()
+	if err != nil {
+		return "credential revocation is unavailable"
+	}
+	d.stateMu.Lock()
+	d.paired = false
+	d.pairingVerified = false
+	d.stateMu.Unlock()
+	return ""
 }
 
 func (d *Daemon) createPairing() (*localapi.Pairing, string) {
@@ -192,7 +245,7 @@ func (d *Daemon) cancelPairing() string {
 func (d *Daemon) runControl(ctx context.Context) {
 	backoff := time.Second
 	for ctx.Err() == nil {
-		ready, connection, err := control.Connect(ctx, d.serviceURL, d.identity.PrivateKey, "dev")
+		ready, connection, err := control.Connect(ctx, d.serviceURL, d.identity.PrivateKey, d.agentVersion)
 		if err == nil {
 			backoff = time.Second
 			connectionCtx, stopConnection := context.WithCancel(ctx)

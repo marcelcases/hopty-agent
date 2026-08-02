@@ -6,8 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -30,7 +32,7 @@ func run(args []string) error {
 		return nil
 	}
 	if len(args) == 0 {
-		return errors.New("expected agent, pair, revoke, or status")
+		return errors.New("expected agent, pair, revoke, status, or uninstall")
 	}
 
 	command := args[0]
@@ -67,19 +69,24 @@ func run(args []string) error {
 		if *wait {
 			return errors.New("--wait is only valid with pair")
 		}
-		return call(*home, "revoke")
+		return revoke(*home)
+	case "uninstall":
+		if *wait {
+			return errors.New("--wait is only valid with pair")
+		}
+		return uninstall(*home)
 	case "status":
 		if *wait {
 			return errors.New("--wait is only valid with pair")
 		}
 		return call(*home, "status")
 	default:
-		return errors.New("expected agent, pair, revoke, or status")
+		return errors.New("expected agent, pair, revoke, status, or uninstall")
 	}
 }
 
 func runAgent(home string) error {
-	daemon, err := agent.Start(home)
+	daemon, err := agent.Start(home, version)
 	if err != nil {
 		return err
 	}
@@ -148,21 +155,137 @@ func request(home, command string, retryUnavailable bool) (localapi.Response, er
 	}
 }
 
+func revoke(home string) error {
+	response, err := request(home, "revoke", true)
+	if err != nil {
+		return err
+	}
+	_ = response
+	fmt.Println("Passkey revoked.")
+	return nil
+}
+
 func printStatus(status localapi.Status) {
-	connection := "offline"
-	if status.Connected {
-		connection = "connected"
+	versionText := strings.TrimPrefix(status.AgentVersion, "v")
+	if versionText == "" {
+		versionText = "unknown"
 	}
-	pairing := "awaiting pairing"
-	if status.PairingVerified {
-		pairing = "code verified"
+	if !status.Paired {
+		fmt.Printf("Hopty Agent v%s is installed.\n\nTo create a passkey, run hopty pair\nTo uninstall, run hopty uninstall\n", versionText)
+		return
 	}
-	if status.Paired {
-		pairing = "paired"
+	fmt.Printf("Hopty Agent v%s is up.\n\n", versionText)
+	if len(status.Sessions) == 0 {
+		fmt.Print("No active sessions.\n\nGo to hopty.net to access your terminal\n\n")
+		printStatusTimes(status)
+		fmt.Print("\nTo revoke passkey, run hopty revoke\nTo uninstall, run hopty uninstall\n")
+		return
 	}
-	accent := "\033[38;2;232;138;69m"
-	reset := "\033[0m"
-	fmt.Printf("%sHopty Agent is active%s\n\nGo to %shopty.net%s to access your terminal\n\nConnection          %s\nHost                %s\nActive sessions     %d\n", accent, reset, accent, reset, connection, pairing, status.ActiveTerminals)
+	fmt.Printf("Active sessions     %d\n\n", len(status.Sessions))
+	for index, session := range status.Sessions {
+		if index > 0 {
+			fmt.Println()
+		}
+		fmt.Printf("User                %s\nConnection          %s\nTransport           %s\nLatency             %d ms\nIncoming IP         %s\n", valueOr(session.User, "unknown"), valueOr(session.Connection, "unknown"), valueOr(session.Transport, "unknown"), session.LatencyMS, valueOr(session.IncomingIP, "unknown"))
+	}
+	printStatusTimes(status)
+	fmt.Print("\nTo revoke passkey, run hopty revoke\nTo uninstall, run hopty uninstall\n")
+}
+
+func printStatusTimes(status localapi.Status) {
+	fmt.Printf("Last access         %s\nPasskey created     %s\n", formatTime(status.LastAccessAt), formatTime(status.PasskeyCreatedAt))
+}
+
+func valueOr(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func formatTime(value *time.Time) string {
+	if value == nil {
+		return "Never"
+	}
+	return value.UTC().Format("2006-01-02 15:04:05 UTC")
+}
+
+const managedShellBlock = "# Hopty\n. \"$HOME/.local/bin/env\"\nexport PATH=\"$HOME/.local/bin:$PATH\"\n# End Hopty\n"
+const managedEnvFile = "# Hopty-managed local environment.\nexport PATH=\"$HOME/.local/bin:$PATH\"\n"
+
+func uninstall(home string) error {
+	if _, err := request(home, "revoke", true); err != nil && !strings.Contains(err.Error(), "agent is not running") {
+		return err
+	}
+	if err := stopUserService(); err != nil {
+		return err
+	}
+	userHome, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	localBin := filepath.Join(userHome, ".local", "bin")
+	hoptyLink := filepath.Join(localBin, "hopty")
+	if target, readErr := os.Readlink(hoptyLink); readErr == nil {
+		resolvedTarget, _ := filepath.EvalSymlinks(filepath.Join(filepath.Dir(hoptyLink), target))
+		resolvedHome, _ := filepath.EvalSymlinks(home)
+		if resolvedTarget == filepath.Join(resolvedHome, "bin", "hopty") {
+			if err := os.Remove(hoptyLink); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+		}
+	}
+	for _, profile := range []string{filepath.Join(userHome, ".bashrc"), filepath.Join(userHome, ".profile")} {
+		if err := removeShellBlock(profile); err != nil {
+			return err
+		}
+	}
+	envFile := filepath.Join(localBin, "env")
+	if data, readErr := os.ReadFile(envFile); readErr == nil && string(data) == managedEnvFile {
+		if err := os.Remove(envFile); err != nil {
+			return err
+		}
+	}
+	if err := os.RemoveAll(home); err != nil {
+		return err
+	}
+	fmt.Println("Hopty Agent uninstalled successfully.")
+	return nil
+}
+
+func stopUserService() error {
+	if _, err := exec.LookPath("systemctl"); err != nil {
+		return nil
+	}
+	status := exec.Command("systemctl", "--user", "is-active", "--quiet", "hopty.service").Run()
+	if status == nil {
+		if err := exec.Command("systemctl", "--user", "disable", "--now", "hopty.service").Run(); err != nil {
+			return fmt.Errorf("could not stop hopty.service: %w", err)
+		}
+	} else {
+		_ = exec.Command("systemctl", "--user", "disable", "hopty.service").Run()
+	}
+	_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+	return nil
+}
+
+func removeShellBlock(path string) error {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	updated := strings.ReplaceAll(string(data), managedShellBlock, "")
+	if updated == string(data) {
+		return nil
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(updated), info.Mode().Perm())
 }
 
 func defaultHome() string {

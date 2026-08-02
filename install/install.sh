@@ -27,6 +27,18 @@ mkdir -p "$bin_dir" "$home/run" "$home/tmp" "$local_bin"
 chmod 700 "$home" "$bin_dir" "$home/run" "$home/tmp" "$local_bin"
 if [ ! -f "$home/config.toml" ]; then printf 'service_url = "%s"\n' "$HOPTY_SERVICE_URL" >"$home/config.toml"; fi
 chmod 600 "$home/config.toml"
+managed_env='# Hopty-managed local environment.\nexport PATH="$HOME/.local/bin:$PATH"\n'
+if [ ! -e "$local_bin/env" ]; then
+  printf '%b' "$managed_env" >"$local_bin/env"
+  chmod 600 "$local_bin/env"
+fi
+managed_shell='# Hopty\n. "$HOME/.local/bin/env"\nexport PATH="$HOME/.local/bin:$PATH"\n# End Hopty\n'
+for profile in "$HOME/.profile" "$HOME/.bashrc"; do
+  [ -f "$profile" ] || : >"$profile"
+  if ! grep -Fq '. "$HOME/.local/bin/env"' "$profile" || ! grep -Fq 'export PATH="$HOME/.local/bin:$PATH"' "$profile"; then
+    printf '\n%b' "$managed_shell" >>"$profile"
+  fi
+done
 
 base_url=${HOPTY_RELEASE_BASE_URL:-https://github.com/marcelcases/hopty-agent/releases/download/$HOPTY_VERSION}
 asset=hopty_linux_$arch
@@ -54,14 +66,10 @@ actual=$(sha256sum "$work/hopty" 2>/dev/null | awk '{print $1}' || shasum -a 256
 chmod 700 "$work/hopty"
 mv -f "$work/hopty" "$bin_dir/hopty"
 ln -sfn "$bin_dir/hopty" "$local_bin/hopty"
-for profile in "$HOME/.profile" "$HOME/.bashrc"; do
-  [ -f "$profile" ] || : >"$profile"
-  grep -Fqx 'export PATH="$HOME/.local/bin:$PATH"' "$profile" || printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >>"$profile"
-done
 success "Verified agent installed"
 
 step "Starting the local agent"
-printf '%s  Connection timeout: 30 seconds%s\n' "$dim" "$reset"
+printf '%s  Pairing will retry for up to 35 seconds if the agent is still connecting%s\n' "$dim" "$reset"
 mkdir -p "$HOME/.config/systemd/user"
 cat >"$HOME/.config/systemd/user/hopty.service" <<EOF
 [Unit]
@@ -75,23 +83,16 @@ WantedBy=default.target
 EOF
 
 if systemctl --user daemon-reload >/dev/null 2>&1 && systemctl --user enable hopty.service >/dev/null 2>&1 && systemctl --user restart hopty.service >/dev/null 2>&1; then :; else nohup "$bin_dir/hopty" agent >"$home/agent.log" 2>&1 & fi
-attempt=0
-while :; do
-  status=$("$bin_dir/hopty" status 2>/dev/null || true)
-  case "$status" in *"Connection"*"connected"*) break;; esac
-  attempt=$((attempt + 1))
-  [ "$attempt" -lt 30 ] || { echo "Hopty agent did not connect within 30 seconds" >&2; exit 1; }
-  sleep 1
-done
-success "Agent connected securely"
+status=$("$bin_dir/hopty" status 2>/dev/null || true)
+success "Agent process started"
 
 case "$status" in
-  *"Host"*"paired"*|*"Host"*"code verified"*) success "This host is already linked.";;
+  *"is up."*) success "This host is already linked.";;
   *) "$bin_dir/hopty" pair --wait;;
 esac
 
 printf '\n%sHopty is ready.%s\n\n' "$accent" "$reset"
 printf 'Go to %shttps://hopty.net%s and open a new shell.\n\n' "$accent" "$reset"
 printf '%sOptional:%s keep the agent running after logout with:\n  sudo loginctl enable-linger %s\n\n' "$dim" "$reset" "$(id -un)"
-printf 'To uninstall, remove %s~/.hopty%s\n' "$accent" "$reset"
-printf 'To revoke, run: %shopty revoke%s\n\n' "$accent" "$reset"
+printf 'To revoke passkey, run: %shopty revoke%s\n' "$accent" "$reset"
+printf 'To uninstall, run: %shopty uninstall%s\n\n' "$accent" "$reset"

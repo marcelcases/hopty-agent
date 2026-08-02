@@ -8,14 +8,14 @@ import (
 
 func TestLoad(t *testing.T) {
 	home := t.TempDir()
-	if err := os.WriteFile(filepath.Join(home, FileName), []byte("service_url = \"https://622492695.xyz\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(home, FileName), []byte("service_url = \"https://api.hopty.net\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	config, err := Load(home)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.ServiceURL.String() != "https://622492695.xyz" {
+	if config.ServiceURL.String() != "https://api.hopty.net" {
 		t.Fatalf("unexpected service URL %q", config.ServiceURL)
 	}
 }
