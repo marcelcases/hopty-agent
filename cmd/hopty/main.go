@@ -33,7 +33,7 @@ func run(args []string) error {
 		return nil
 	}
 	if len(args) == 0 {
-		return errors.New("expected agent, pair, revoke, status, or uninstall")
+		return errors.New("expected agent, pair, revoke, status, upgrade, or uninstall")
 	}
 
 	command := args[0]
@@ -81,8 +81,13 @@ func run(args []string) error {
 			return errors.New("--wait is only valid with pair")
 		}
 		return call(*home, "status")
+	case "upgrade":
+		if *wait {
+			return errors.New("--wait is only valid with pair")
+		}
+		return upgrade(*home)
 	default:
-		return errors.New("expected agent, pair, revoke, status, or uninstall")
+		return errors.New("expected agent, pair, revoke, status, upgrade, or uninstall")
 	}
 }
 
@@ -177,14 +182,14 @@ func printStatus(status localapi.Status) {
 		versionText = "unknown"
 	}
 	if !status.Paired {
-		fmt.Printf("Hopty Agent v%s is installed.\n\nTo create a passkey, run hopty pair\nTo uninstall, run hopty uninstall\n", versionText)
+		fmt.Printf("Hopty Agent v%s is installed.\n\nTo create a passkey, run hopty pair\nTo upgrade, run hopty upgrade\nTo uninstall, run hopty uninstall\n", versionText)
 		return
 	}
 	fmt.Printf("Hopty Agent v%s is up.\n\n", versionText)
 	if len(status.Sessions) == 0 {
 		fmt.Print("No active sessions.\n\nGo to hopty.net to access your terminal\n\n")
 		printStatusTimes(status)
-		fmt.Print("\nTo revoke passkey, run hopty revoke\nTo uninstall, run hopty uninstall\n")
+		fmt.Print("\nTo upgrade, run hopty upgrade\nTo revoke passkey, run hopty revoke\nTo uninstall, run hopty uninstall\n")
 		return
 	}
 	fmt.Printf("Active sessions     %d\n\n", len(status.Sessions))
@@ -195,7 +200,7 @@ func printStatus(status localapi.Status) {
 	}
 	fmt.Printf("User                %s\nConnection          %s\nTransport           %s\nLatency             %s\nIncoming IP         %s\n", valueOr(session.User, "unknown"), valueOr(session.Connection, "unknown"), valueOr(session.Transport, "unknown"), latency, valueOr(session.IncomingIP, "unknown"))
 	printStatusTimes(status)
-	fmt.Print("\nTo revoke passkey, run hopty revoke\nTo uninstall, run hopty uninstall\n")
+	fmt.Print("\nTo upgrade, run hopty upgrade\nTo revoke passkey, run hopty revoke\nTo uninstall, run hopty uninstall\n")
 }
 
 func summarizeSessions(sessions []localapi.SessionStatus) localapi.SessionStatus {

@@ -26,7 +26,7 @@ func TestPrintStatusUnpaired(t *testing.T) {
 	output := captureOutput(t, func() {
 		printStatus(localapi.Status{AgentVersion: "v0.1.0-beta.1"})
 	})
-	want := "Hopty Agent v0.1.0-beta.1 is installed.\n\nTo create a passkey, run hopty pair\nTo uninstall, run hopty uninstall\n"
+	want := "Hopty Agent v0.1.0-beta.1 is installed.\n\nTo create a passkey, run hopty pair\nTo upgrade, run hopty upgrade\nTo uninstall, run hopty uninstall\n"
 	if output != want {
 		t.Fatalf("status output = %q, want %q", output, want)
 	}

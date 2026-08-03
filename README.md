@@ -20,12 +20,13 @@ make dev
 
 The immutable service installer injects a release version, SHA-256 digest, and service origin before it is served as `/install.sh`. It installs under `~/.hopty/`, verifies the binary, starts a user service when available, then runs `hopty pair`. It never invokes `sudo`; it only prints the optional `loginctl enable-linger` command. During pairing, the agent supplies its local Unix username and hostname on its authenticated control connection so the newly created passkey is labelled `user@hostname`.
 
-The service Pages build resolves the latest published release from GitHub metadata, so agent version/checksum values are not Pages settings. The release workflow optionally refreshes the staging Pages build when the `HOPTY_PAGES_STAGING_DEPLOY_HOOK` GitHub secret is configured; it is disabled by default.
+The service Pages build resolves the latest published release from GitHub metadata, so agent version/checksum values are not Pages settings. `hopty upgrade` reads that immutable installer metadata, verifies the matching binary checksum, replaces the local binary atomically, and restarts the agent without changing its identity or pairing. The release workflow optionally refreshes the staging Pages build when the `HOPTY_PAGES_STAGING_DEPLOY_HOOK` GitHub secret is configured; it is disabled by default.
 
 Useful local commands:
 
 ```text
 hopty status       # installed, paired, or active-session status
+hopty upgrade      # download and install the latest verified agent release
 hopty revoke       # revoke the passkey and close active sessions
 hopty uninstall    # revoke, stop the user service, and remove agent files
 ```

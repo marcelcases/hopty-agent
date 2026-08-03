@@ -20,7 +20,7 @@ success() { printf '%s✓%s %s\n' "$accent" "$reset" "$1"; }
 case "$(uname -s)" in Linux) ;; *) echo "Hopty supports Linux only" >&2; exit 1;; esac
 case "$(uname -m)" in x86_64|amd64) arch=amd64; checksum=$HOPTY_SHA256_AMD64;; aarch64|arm64) arch=arm64; checksum=$HOPTY_SHA256_ARM64;; *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1;; esac
 
-home=${HOME:?HOME is required}/.hopty
+home=${HOPTY_HOME:-${HOME:?HOME is required}/.hopty}
 bin_dir=$home/bin
 local_bin=$HOME/.local/bin
 mkdir -p "$bin_dir" "$home/run" "$home/tmp" "$local_bin"
@@ -82,7 +82,28 @@ RestartSec=2
 WantedBy=default.target
 EOF
 
-if systemctl --user daemon-reload >/dev/null 2>&1 && systemctl --user enable hopty.service >/dev/null 2>&1 && systemctl --user restart hopty.service >/dev/null 2>&1; then :; else nohup "$bin_dir/hopty" agent >"$home/agent.log" 2>&1 & fi
+if systemctl --user daemon-reload >/dev/null 2>&1 && systemctl --user enable hopty.service >/dev/null 2>&1 && systemctl --user restart hopty.service >/dev/null 2>&1; then
+  :
+else
+  if [ "${HOPTY_UPGRADE:-0}" = 1 ] && [ -r "$home/run/agent.pid" ]; then
+    pid=$(cat "$home/run/agent.pid" 2>/dev/null || true)
+    case "$pid" in
+      ''|*[!0-9]*) ;;
+      *)
+        if [ -r "/proc/$pid/cmdline" ] && tr '\000' ' ' <"/proc/$pid/cmdline" | grep -Fq "$bin_dir/hopty"; then
+          kill "$pid" 2>/dev/null || true
+          attempt=0
+          while kill -0 "$pid" 2>/dev/null; do
+            attempt=$((attempt + 1))
+            [ "$attempt" -ge 40 ] && { kill -KILL "$pid" 2>/dev/null || true; break; }
+            sleep 0.05
+          done
+        fi
+        ;;
+    esac
+  fi
+  nohup "$bin_dir/hopty" agent >"$home/agent.log" 2>&1 &
+fi
 attempt=0
 while :; do
   status=$("$bin_dir/hopty" status 2>/dev/null || true)
@@ -97,13 +118,21 @@ while :; do
 done
 success "Agent process started"
 
-case "$status" in
-  *"is up."*) success "This host is already linked.";;
-  *) "$bin_dir/hopty" pair --wait;;
-esac
+if [ "${HOPTY_UPGRADE:-0}" = 1 ]; then
+  case "$status" in
+    *"is up."*) success "Existing pairing preserved.";;
+    *) success "Agent upgraded. Run hopty pair when you are ready to link this host.";;
+  esac
+else
+  case "$status" in
+    *"is up."*) success "This host is already linked.";;
+    *) "$bin_dir/hopty" pair --wait;;
+  esac
+fi
 
 printf '\n%sHopty is ready.%s\n\n' "$accent" "$reset"
 printf 'Go to %shttps://hopty.net%s and open a new shell.\n\n' "$accent" "$reset"
 printf '%sOptional:%s keep the agent running after logout with:\n  sudo loginctl enable-linger %s\n\n' "$dim" "$reset" "$(id -un)"
+printf 'To upgrade agent, run: %shopty upgrade%s\n' "$accent" "$reset"
 printf 'To revoke passkey, run: %shopty revoke%s\n' "$accent" "$reset"
 printf 'To uninstall, run: %shopty uninstall%s\n\n' "$accent" "$reset"
